@@ -1,0 +1,4 @@
+export const money = (value) => new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(Number(value)||0);
+export const occasions = [['birthday','Sinh nhật'],['anniversary','Kỷ niệm'],['valentines','Ngày Valentine'],['graduation','Tốt nghiệp'],['promotion','Thăng chức'],['housewarming','Tân gia'],['thank-you','Cảm ơn']];
+export const recipients = [['partner','Người yêu/bạn đời'],['friend','Bạn bè'],['mother','Mẹ'],['father','Bố'],['sister','Chị/em gái'],['brother','Anh/em trai'],['teacher','Thầy cô'],['colleague','Đồng nghiệp'],['manager','Quản lý'],['student','Học sinh/sinh viên'],['child','Trẻ em']];
+export const interests = [['flowers','Hoa'],['gardening','Làm vườn'],['plants','Cây cảnh'],['stationery','Văn phòng phẩm'],['home','Đồ dùng gia đình'],['fragrance','Nến và hương thơm'],['coffee','Cà phê'],['craft','Thủ công'],['art','Nghệ thuật'],['sweets','Bánh kẹo'],['outdoors','Du lịch ngoài trời']];

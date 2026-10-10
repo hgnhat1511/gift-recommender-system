@@ -1,0 +1,35 @@
+import { useEffect, useState } from 'react';
+import api, { getApiError } from '../../lib/api.js';
+import { money } from '../../data/catalogOptions.js';
+
+const emptyCoupon={code:'',discountType:'PERCENT',discountValue:'',maxDiscount:'',minSubtotal:'0',startsAt:'',endsAt:'',usageLimit:'',perUserLimit:1,isActive:true,categoryIds:[]};
+const toLocalInput=(value)=>value?String(value).replace(' ','T').slice(0,16):'';
+
+export default function CouponAdminPage(){
+ const [coupons,setCoupons]=useState([]);const [categories,setCategories]=useState([]);const [form,setForm]=useState(emptyCoupon);const [editing,setEditing]=useState('');const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
+ async function load(){setLoading(true);try{const [couponResponse,categoryResponse]=await Promise.all([api.get('/admin/coupons'),api.get('/admin/categories')]);setCoupons(couponResponse.data.data);setCategories(categoryResponse.data.data);setError('')}catch(e){setError(getApiError(e,'Không tải được mã giảm giá.'))}finally{setLoading(false)}}
+ useEffect(()=>{let active=true;Promise.all([api.get('/admin/coupons'),api.get('/admin/categories')]).then(([couponResponse,categoryResponse])=>{if(active){setCoupons(couponResponse.data.data);setCategories(categoryResponse.data.data);setError('')}}).catch(e=>{if(active)setError(getApiError(e,'Không tải được mã giảm giá.'))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
+ function reset(){setEditing('');setForm(emptyCoupon)}
+ function change(key,value){setForm(current=>({...current,[key]:value}))}
+ function toggleCategory(id){setForm(current=>({...current,categoryIds:current.categoryIds.includes(id)?current.categoryIds.filter(value=>value!==id):[...current.categoryIds,id]}))}
+ function edit(coupon){setEditing(coupon.id);setForm({code:coupon.code,discountType:coupon.discountType,discountValue:coupon.discountValue,maxDiscount:coupon.maxDiscount??'',minSubtotal:coupon.minSubtotal,startsAt:toLocalInput(coupon.startsAt),endsAt:toLocalInput(coupon.endsAt),usageLimit:coupon.usageLimit??'',perUserLimit:coupon.perUserLimit,isActive:coupon.isActive,categoryIds:coupon.categoryIds||[]});setMessage('');setError('')}
+ async function submit(event){event.preventDefault();setBusy(true);setError('');setMessage('');const payload={...form,discountValue:Number(form.discountValue),maxDiscount:form.maxDiscount===''?null:Number(form.maxDiscount),minSubtotal:Number(form.minSubtotal||0),usageLimit:form.usageLimit===''?null:Number(form.usageLimit),perUserLimit:Number(form.perUserLimit),startsAt:form.startsAt||null,endsAt:form.endsAt||null};try{if(editing)await api.put('/admin/coupons/'+editing,payload);else await api.post('/admin/coupons',payload);setMessage(editing?'Đã cập nhật mã giảm giá.':'Đã tạo mã giảm giá.');reset();await load()}catch(e){setError(getApiError(e,'Không lưu được mã giảm giá.'))}finally{setBusy(false)}}
+ async function archive(coupon){if(!window.confirm('Khóa mã '+coupon.code+'?'))return;try{await api.delete('/admin/coupons/'+coupon.id);setMessage('Đã khóa mã '+coupon.code+'.');await load()}catch(e){setError(getApiError(e,'Không khóa được mã.'))}}
+ return <><div className="admin-page-heading"><div><h1>Mã giảm giá</h1><p>Backend xác minh thời hạn, phạm vi danh mục, giá trị đơn và hạn mức trong checkout.</p></div></div>{error&&<p className="commerce-alert">{error}</p>}{message&&<p className="commerce-alert commerce-alert-success">{message}</p>}
+  <section className="admin-card"><h2>{editing?'Chỉnh sửa mã':'Tạo mã giảm giá'}</h2><form className="admin-form-grid" onSubmit={submit}>
+   <label>Mã<input required pattern="[A-Za-z0-9_-]{3,40}" value={form.code} onChange={e=>change('code',e.target.value.toUpperCase())}/></label>
+   <label>Kiểu giảm<select value={form.discountType} onChange={e=>change('discountType',e.target.value)}><option value="PERCENT">Phần trăm</option><option value="FIXED">Số tiền cố định</option></select></label>
+   <label>Giá trị giảm<input required type="number" min="1" step="0.01" value={form.discountValue} onChange={e=>change('discountValue',e.target.value)}/></label>
+   <label>Giảm tối đa (₫)<input type="number" min="0" step="0.01" value={form.maxDiscount} onChange={e=>change('maxDiscount',e.target.value)}/></label>
+   <label>Đơn tối thiểu đủ điều kiện (₫)<input type="number" min="0" step="0.01" value={form.minSubtotal} onChange={e=>change('minSubtotal',e.target.value)}/></label>
+   <label>Giới hạn tổng lượt<input type="number" min="1" step="1" value={form.usageLimit} onChange={e=>change('usageLimit',e.target.value)}/></label>
+   <label>Lượt mỗi tài khoản<input type="number" min="1" max="1000" step="1" value={form.perUserLimit} onChange={e=>change('perUserLimit',e.target.value)}/></label>
+   <label>Bắt đầu<input type="datetime-local" value={form.startsAt} onChange={e=>change('startsAt',e.target.value)}/></label>
+   <label>Kết thúc<input type="datetime-local" value={form.endsAt} onChange={e=>change('endsAt',e.target.value)}/></label>
+   <label className="admin-check"><input type="checkbox" checked={form.isActive} onChange={e=>change('isActive',e.target.checked)}/> Đang hoạt động</label>
+   <fieldset className="admin-full coupon-category-fieldset"><legend>Danh mục được giảm</legend><p>Không chọn danh mục nghĩa là mã áp dụng cho mọi sản phẩm. Nếu có chọn, mức giảm và giá trị tối thiểu chỉ tính trên sản phẩm thuộc các danh mục này.</p><div>{categories.map(category=><label key={category.id}><input type="checkbox" checked={form.categoryIds.includes(category.id)} onChange={()=>toggleCategory(category.id)}/>{category.name}{!category.isActive&&<small>Đã ẩn</small>}</label>)}</div></fieldset>
+   <div className="admin-full"><button className="commerce-button" disabled={busy}>{busy?'Đang lưu…':editing?'Lưu thay đổi':'Tạo mã'}</button>{editing&&<button type="button" className="commerce-button commerce-button-light" onClick={reset}>Hủy sửa</button>}</div>
+  </form></section>
+  <section className="admin-card"><h2>Danh sách mã</h2>{loading?<p>Đang tải…</p>:coupons.length?<div className="admin-table-wrap"><table><thead><tr><th>Mã</th><th>Giảm</th><th>Danh mục</th><th>Đơn tối thiểu</th><th>Đã dùng</th><th>Thời hạn</th><th>Trạng thái</th><th/></tr></thead><tbody>{coupons.map(coupon=><tr key={coupon.id}><td><b>{coupon.code}</b></td><td>{coupon.discountType==='PERCENT'?coupon.discountValue+'%':money(coupon.discountValue)}</td><td>{coupon.categoryNames.length?coupon.categoryNames.join(', '):'Mọi sản phẩm'}</td><td>{money(coupon.minSubtotal)}</td><td>{coupon.usedCount}{coupon.usageLimit?' / '+coupon.usageLimit:''}</td><td>{coupon.endsAt?new Date(coupon.endsAt).toLocaleString('vi-VN'):'Không giới hạn'}</td><td>{coupon.isActive?'Hoạt động':'Đã khóa'}</td><td><button className="commerce-text-button" onClick={()=>edit(coupon)}>Sửa</button>{coupon.isActive&&<button className="commerce-text-button" onClick={()=>archive(coupon)}>Khóa</button>}</td></tr>)}</tbody></table></div>:<p>Chưa có mã giảm giá.</p>}</section>
+ </>
+}

@@ -1,0 +1,22 @@
+const express = require('express');
+const account = require('../controllers/accountController');
+const { requireAuth } = require('../middleware/authMiddleware');
+
+const router = express.Router();
+router.use(requireAuth);
+router.get('/profile', account.profile);
+router.patch('/profile', account.updateProfile);
+router.patch('/password', account.changePassword);
+router.get('/deletion-request', account.getDeletionRequest);
+router.post('/deletion-request', account.createDeletionRequest);
+router.get('/addresses', account.listAddresses);
+router.post('/addresses', account.createAddress);
+router.put('/addresses/:id', account.updateAddress);
+router.patch('/addresses/:id/default', account.setDefaultAddress);
+router.delete('/addresses/:id', account.deleteAddress);
+router.get('/favorites', account.favorites);
+router.put('/favorites/:productId', account.toggleFavorite);
+router.get('/reviews', account.reviewHistory);
+router.get('/notifications', account.listNotifications);
+router.patch('/notifications/:id/read', account.markNotificationRead);
+module.exports = router;

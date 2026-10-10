@@ -1,0 +1,15 @@
+const express=require('express');
+const orders=require('../controllers/orderController');
+const returns=require('../controllers/returnController');
+const {requireAuth}=require('../middleware/authMiddleware');
+const router=express.Router();
+router.use(requireAuth);
+router.post('/quote',orders.quote);
+router.post('/',orders.create);
+router.get('/',orders.listMine);
+router.get('/:id',orders.detailMine);
+router.post('/:id/cancel',orders.cancelMine);
+router.post('/:id/reorder',orders.reorderMine);
+router.post('/:id/returns',returns.create);
+router.get('/:id/returns',returns.listMine);
+module.exports=router;

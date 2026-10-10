@@ -1,0 +1,41 @@
+USE gift_ecommerce;
+
+-- 1. Tai khoan nguoi dung
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    role ENUM('USER', 'STAFF', 'ADMIN') NOT NULL DEFAULT 'USER',
+    status ENUM('ACTIVE', 'LOCKED') NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 2. Danh muc san pham
+CREATE TABLE IF NOT EXISTS categories (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. San pham qua tang
+CREATE TABLE IF NOT EXISTS products (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    category_id BIGINT UNSIGNED,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    price DECIMAL(12, 2) NOT NULL,
+    stock INT UNSIGNED NOT NULL DEFAULT 0,
+    image_url VARCHAR(500),
+    status ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_products_category
+        FOREIGN KEY (category_id) REFERENCES categories(id)
+        ON DELETE SET NULL
+);
