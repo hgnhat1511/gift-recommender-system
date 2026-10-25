@@ -22,7 +22,8 @@ import {
 import './App.css';
 import api, { getAuth, getApiError } from './lib/api.js';
 import { ProductCard } from './pages/store/CatalogPages.jsx';
-import { addGuestCartItem, getGuestCartCount, subscribeToGuestCart } from './lib/guestCart.js';
+import { addGuestCartItem } from './lib/guestCart.js';
+import { useCart, emitCartChange } from './context/CartContext.jsx';
 
 const categoryIcons = [Cake, Heart, Flower2, Gift, Coffee, Sparkles];
 const categoryColors = ['pink', 'rose', 'green', 'purple', 'orange', 'blue'];
@@ -46,7 +47,7 @@ function App() {
   const [productCount, setProductCount] = useState(0);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState('');
-  const [cartCount, setCartCount] = useState(0);
+  const { cartCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const navigate = useNavigate();
@@ -76,17 +77,6 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const refreshCount = () => {
-      if (!getAuth()?.token) { setCartCount(getGuestCartCount()); return; }
-      api.get('/cart').then(({ data }) => setCartCount(data.data.itemCount)).catch(() => {});
-    };
-    refreshCount();
-    const unsubscribe = subscribeToGuestCart(refreshCount);
-    window.addEventListener('giftly:auth-change', refreshCount);
-    return () => { unsubscribe(); window.removeEventListener('giftly:auth-change', refreshCount); };
-  }, []);
-
   const toggleFavorite = async (id) => {
     if (!getAuth()?.token) return navigate('/login');
     try {
@@ -104,8 +94,7 @@ function App() {
     }
     try {
       await api.post('/cart/items', { productId: product.id, quantity: 1 });
-      const { data } = await api.get('/cart');
-      setCartCount(data.data.itemCount);
+      emitCartChange();
       setNotice(`Đã thêm “${product.name}” vào giỏ hàng.`);
     } catch (error) { setNotice(getApiError(error, 'Không thể thêm sản phẩm vào giỏ hàng.')); }
   };

@@ -25,11 +25,19 @@ async function add(req, res, next) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [products] = await connection.execute("SELECT id,stock FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [req.body.productId]);
+        const [products] = await connection.execute("SELECT id,name,stock FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [req.body.productId]);
         if (!products[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Product not found or inactive.' }); }
         const [items] = await connection.execute('SELECT quantity FROM cart_items WHERE user_id=? AND product_id=? FOR UPDATE', [req.user.id,req.body.productId]);
-        const target = qty + Number(items[0]?.quantity || 0);
-        if (target > Number(products[0].stock)) { await connection.rollback(); return res.status(409).json({ success:false,message:`Only ${products[0].stock} item(s) are currently available.`,data:{stock:Number(products[0].stock)} }); }
+        const inCart = Number(items[0]?.quantity || 0);
+        const target = qty + inCart;
+        if (target > Number(products[0].stock)) {
+            await connection.rollback();
+            return res.status(409).json({
+                success: false,
+                message: `Only ${products[0].stock} item(s) are currently available.`,
+                data: { productId: String(products[0].id), name: products[0].name, stock: Number(products[0].stock), alreadyInCart: inCart, requested: qty }
+            });
+        }
         await connection.execute(`INSERT INTO cart_items (user_id,product_id,quantity) VALUES (?,?,?)
             ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),is_selected=TRUE`, [req.user.id,req.body.productId,target]);
         await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'CART_ADD')", [req.user.id,req.body.productId]);
@@ -122,10 +130,17 @@ async function update(req, res, next) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [rows] = await connection.execute(`SELECT ci.id,p.stock,p.status FROM cart_items ci JOIN products p ON p.id=ci.product_id
+        const [rows] = await connection.execute(`SELECT ci.id,p.id product_id,p.name,p.stock,p.status FROM cart_items ci JOIN products p ON p.id=ci.product_id
             WHERE ci.id=? AND ci.user_id=? FOR UPDATE`, [req.params.itemId,req.user.id]);
         if (!rows[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Cart item not found.' }); }
-        if (rows[0].status !== 'ACTIVE' || qty > Number(rows[0].stock)) { await connection.rollback(); return res.status(409).json({ success:false,message:'Requested quantity is not available.',data:{stock:Number(rows[0].stock)} }); }
+        if (rows[0].status !== 'ACTIVE' || qty > Number(rows[0].stock)) {
+            await connection.rollback();
+            return res.status(409).json({
+                success: false,
+                message: rows[0].status !== 'ACTIVE' ? `Product "${rows[0].name}" is no longer available.` : `Only ${rows[0].stock} item(s) available for "${rows[0].name}".`,
+                data: { productId: String(rows[0].product_id), name: rows[0].name, stock: Number(rows[0].stock), requested: qty }
+            });
+        }
         await connection.execute('UPDATE cart_items SET quantity=? WHERE id=?', [qty,req.params.itemId]);
         await connection.commit();
         return res.json({ success:true });

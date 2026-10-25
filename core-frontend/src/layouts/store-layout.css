@@ -163,6 +163,23 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
+.store-layout-cart-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full, 999px);
+  background: var(--brand-primary, #DC2626);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .store-layout-header button {
   border: 1px solid var(--border-hairline, #E5E7EB);
   background: transparent;

@@ -21,8 +21,24 @@ async function quoteTotals(connection, userId, addressId, couponCode, lock = fal
         FROM cart_items ci LEFT JOIN products p ON p.id=ci.product_id LEFT JOIN categories c ON c.id=p.category_id
         WHERE ci.user_id=? AND ci.is_selected=1 ${lock ? 'FOR UPDATE' : ''}`, [userId]);
     if (!items.length) return { error:'Select at least one product from your cart.' };
-    if (items.some((item) => !item.name || item.status !== 'ACTIVE')) return { error:'One or more cart products are no longer available.' };
-    if (items.some((item) => Number(item.quantity) > Number(item.stock))) return { error:'A cart quantity exceeds current stock. Update your cart before checkout.' };
+    const unavailableItem = items.find((item) => !item.name || item.status !== 'ACTIVE');
+    if (unavailableItem) {
+        return {
+            error: `Sản phẩm "${unavailableItem.name || 'trong giỏ'}" hiện không còn kinh doanh hoặc đã ngừng hoạt động.`,
+            data: { productId: unavailableItem.product_id }
+        };
+    }
+    const outOfStockItem = items.find((item) => Number(item.quantity) > Number(item.stock));
+    if (outOfStockItem) {
+        return {
+            error: `Sản phẩm "${outOfStockItem.name}" chỉ còn ${outOfStockItem.stock} trong kho (bạn đặt ${outOfStockItem.quantity}). Vui lòng cập nhật số lượng giỏ hàng.`,
+            data: {
+                productId: outOfStockItem.product_id,
+                available: Number(outOfStockItem.stock),
+                requested: Number(outOfStockItem.quantity)
+            }
+        };
+    }
     const subtotalCents = items.reduce((sum,item) => sum + cents(item.price) * Number(item.quantity), 0);
     let coupon = null; let discountCents = 0; let discountBaseCents = null; let eligibleCategoryNames = [];
     if (couponCode) {
@@ -68,7 +84,7 @@ async function quote(req, res, next) {
     try {
         const shippingMethod = req.body?.shippingMethod || 'STANDARD';
         const totals = await quoteTotals(connection,req.user.id,req.body?.addressId,req.body?.couponCode,false,shippingMethod);
-        if (totals.error) return res.status(400).json({ success:false,message:totals.error });
+        if (totals.error) return res.status(400).json({ success:false,message:totals.error,data:totals.data });
         return res.json({ success:true,data:{ subtotal:amount(totals.subtotalCents),discount:amount(totals.discountCents),discountEligibleSubtotal:totals.discountBaseCents==null?null:amount(totals.discountBaseCents),coupon:totals.coupon?{code:totals.coupon.code,categoryNames:totals.eligibleCategoryNames}:null,shippingMethod:totals.shippingMethod,shippingFee:amount(totals.shippingCents),shippingOptions:totals.shippingOptions.map((option)=>({method:option.method,fee:amount(option.feeCents),free:option.free})),total:amount(totals.totalCents),paymentMethod:'COD' } });
     } catch (error) { return next(error); }
     finally { connection.release(); }
@@ -97,7 +113,7 @@ async function create(req, res, next) {
             if(existing[0]){await connection.commit();return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing[0].id),orderCode:existing[0].order_code,status:existing[0].status,paymentMethod:existing[0].payment_method,shippingMethod:existing[0].shipping_method||'STANDARD',total:Number(existing[0].total_amount)}})}
         }
         const totals = await quoteTotals(connection,req.user.id,req.body.addressId,req.body.couponCode,true,req.body.shippingMethod||'STANDARD');
-        if (totals.error) { await connection.rollback(); return res.status(409).json({ success:false,message:totals.error }); }
+        if (totals.error) { await connection.rollback(); return res.status(409).json({ success:false,message:totals.error,data:totals.data }); }
         const orderCode = `GL${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         const address = totals.address;
         const [created] = await connection.execute(`INSERT INTO orders
@@ -108,7 +124,24 @@ async function create(req, res, next) {
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Order placed by customer']);
         for (const item of totals.items) {
             const [updated] = await connection.execute('UPDATE products SET stock=stock-? WHERE id=? AND status=\'ACTIVE\' AND stock>=?', [item.quantity,item.product_id,item.quantity]);
-            if (updated.affectedRows !== 1) throw Object.assign(new Error('Stock changed during checkout.'),{httpStatus:409});
+            if (updated.affectedRows !== 1) {
+                const [freshProducts] = await connection.execute('SELECT name, stock, status FROM products WHERE id=?', [item.product_id]);
+                const fresh = freshProducts[0];
+                if (!fresh || fresh.status !== 'ACTIVE') {
+                    throw Object.assign(new Error(`Sản phẩm "${item.name}" hiện không còn kinh doanh.`), { httpStatus: 409 });
+                }
+                throw Object.assign(
+                    new Error(`Sản phẩm "${item.name}" chỉ còn ${fresh.stock} trong kho (bạn đặt ${item.quantity}). Vui lòng cập nhật lại giỏ hàng.`),
+                    {
+                        httpStatus: 409,
+                        data: {
+                            productId: item.product_id,
+                            available: Number(fresh.stock),
+                            requested: Number(item.quantity)
+                        }
+                    }
+                );
+            }
             await connection.execute('INSERT INTO order_items (order_id,product_id,product_name,image_url,unit_price,quantity,line_total) VALUES (?,?,?,?,?,?,?)',
                 [orderId,item.product_id,item.name,item.image_url,Number(item.price),item.quantity,amount(cents(item.price)*Number(item.quantity))]);
             await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,\'Customer order\',?)', [item.product_id,req.user.id,-Number(item.quantity),orderId]);
@@ -127,7 +160,7 @@ async function create(req, res, next) {
         if(error.code==='ER_DUP_ENTRY'&&requestKey){
             try{const [[existing]]=await pool.execute('SELECT id,order_code,status,total_amount,shipping_method,payment_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1',[req.user.id,requestKey]);if(existing)return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing.id),orderCode:existing.order_code,status:existing.status,paymentMethod:existing.payment_method,shippingMethod:existing.shipping_method||'STANDARD',total:Number(existing.total_amount)}})}catch(readError){return next(readError)}
         }
-        if (error.httpStatus) return res.status(error.httpStatus).json({ success:false,message:error.message });
+        if (error.httpStatus) return res.status(error.httpStatus).json({ success:false,message:error.message,data:error.data });
         return next(error);
     } finally { connection.release(); }
 }
