@@ -1,3 +1,9 @@
+/**
+ * LƯU Ý QUAN TRỌNG:
+ * File này là kiểm thử mô phỏng, không import code thật, không phải bằng chứng xác minh UI/DOM thật.
+ * Không tính vào số test đã xác minh hệ thống thực tế.
+ * Bằng chứng kiểm thử đồng bộ badge giỏ hàng thực tế trên trình duyệt nằm tại e2e/cart-badge.spec.js.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

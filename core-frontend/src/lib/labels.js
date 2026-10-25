@@ -180,7 +180,10 @@ export function getShippingMethodLabel(method) {
 }
 
 export function getShipmentStatusLabel(status) {
-  return lookup(SHIPMENT_STATUS, status, 'shipment_status');
+  if (!status) return '';
+  const key = String(status).trim().toUpperCase();
+  if (key === 'READY_TO_PICK') return SHIPMENT_STATUS.READY_FOR_PICKUP;
+  return lookup(SHIPMENT_STATUS, key, 'shipment_status');
 }
 
 export function getCustomerStatusLabel(status) {

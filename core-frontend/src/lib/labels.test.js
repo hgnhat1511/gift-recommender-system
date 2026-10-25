@@ -113,6 +113,10 @@ test('SHIPMENT_STATUS labels match normalized GHN provider statuses', () => {
   assert.equal(getShipmentStatusLabel('RETURN_FAILED'), 'Chuyển hoàn thất bại');
   assert.equal(getShipmentStatusLabel('CANCELLED'), 'Đã hủy vận chuyển');
   assert.equal(getShipmentStatusLabel('ISSUE'), 'Sự cố vận chuyển');
+  assert.equal(getShipmentStatusLabel('ready_to_pick'), 'Chờ lấy hàng');
+  assert.equal(getShipmentStatusLabel('CREATING'), 'Đang tạo vận đơn');
+  assert.equal(getShipmentStatusLabel('CREATED'), 'Đã tạo vận đơn');
+  assert.equal(getShipmentStatusLabel('FAILED'), 'Tạo vận đơn thất bại');
 });
 
 test('Other administrative labels (customer, role, product, deletion)', () => {

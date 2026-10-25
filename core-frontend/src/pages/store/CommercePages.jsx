@@ -188,7 +188,11 @@ export function OrderDetailPage(){
         }
       });
     }catch(e){
-      setError(getApiError(e,'Không thể mua lại đơn hàng. Kiểm tra tình trạng sản phẩm và giỏ hàng.'));
+      if(e.response?.status === 429){
+        setError('Yêu cầu mua lại đang được xử lý hoặc vừa được gửi. Vui lòng kiểm tra giỏ hàng.');
+      }else{
+        setError(getApiError(e,'Không thể mua lại đơn hàng. Kiểm tra tình trạng sản phẩm và giỏ hàng.'));
+      }
     }finally{
       setBusy(false);
     }

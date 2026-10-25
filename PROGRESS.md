@@ -23,7 +23,7 @@ Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kh
    - Viết `core-frontend/e2e/cart-badge.spec.js` và `core-frontend/playwright-mock.config.js`.
    - Chặn toàn bộ network bằng `route.abort()` cho bất kỳ request nào ngoài mock data, cô lập 100% khỏi backend và DB dev.
    - Kiểm tra trọn vẹn 7 kịch bản: (1) Khách vãng lai thêm sản phẩm; (2) Thêm từ chi tiết với số lượng 3; (3) Đăng nhập gộp giỏ; (4) Đăng xuất reset giỏ; (5) Thêm từ danh sách yêu thích; (6) Mua lại từ chi tiết đơn hàng; (7) Sau khi checkout xóa món đã mua.
-   - Kết quả xác minh: 7/7 tests PASS (8.1 giây).
+   - Kết quả xác minh: 7/7 tests PASS (8.1 giây). Lưu ý: Ca 6 và 7 chỉ chứng minh frontend phản ứng với dữ liệu mock từ server, không phải bằng chứng backend DB thực tế đã ghi/xóa dữ liệu.
 4. **Tính năng bổ sung ngoài prompt gốc:**
    - Route `PATCH /cart/selection`: Cập nhật trạng thái `is_selected` (chọn/bỏ chọn) hàng loạt cho tất cả sản phẩm trong giỏ (`core-backend/routes/cartRoutes.js:12`, `core-backend/controllers/cartController.js:162-168`).
    - Route `DELETE /cart`: Xóa toàn bộ sản phẩm trong giỏ hàng của chính người dùng (`core-backend/routes/cartRoutes.js:14`, `core-backend/controllers/cartController.js:178-181`).
@@ -32,10 +32,16 @@ Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kh
    - Bảo vệ phân quyền: Tất cả các route trên đều bảo vệ bằng `requireAuth`, lọc theo `req.user.id` từ JWT token, tuyệt đối không nhận `userId` từ body/query.
 5. **Nâng cấp Reorder (Mua lại đơn hàng):**
    - Chống bấm đúp trên UI (`disabled={busy}` tại `CommercePages.jsx:223`).
-   - Chống request lặp / concurrency tại backend: cơ chế in-memory debounce theo `userId:orderId` với cửa sổ 2 giây trả về HTTP 429 nếu gửi lặp liên tiếp (`core-backend/controllers/orderController.js:171-185`).
+   - Chống request lặp / concurrency tại backend: cơ chế in-memory debounce theo `userId:orderId` với cửa sổ 2 giây và tự động dọn dẹp bằng TTL 5s trả về HTTP 429 nếu gửi lặp liên tiếp (`core-backend/controllers/orderController.js:171-185`). Lưu ý: Cơ chế in-memory debounce này chỉ đúng trong môi trường đơn tiến trình (single process); khi chạy cụm đa tiến trình/container cần thay thế bằng Redis lock (`SET NX EX`).
    - Áp dụng trần 99 mỗi dòng sản phẩm và ép `is_selected = TRUE` khi đưa vào giỏ.
    - Controller import dùng chung logic từ `cartHelper.js`, không trùng lặp inline.
    - Bổ sung unit test cho `calculateReorderItems` kiểm tra trần 99, hết hàng (stock 0) và giỏ đã đầy trần (`core-backend/test/cart-inventory.test.js:120-165`).
+
+### Đính chính và chuẩn hóa mức độ xác minh (Khu vực 1c)
+- Hạ mức phân loại các khẳng định nghiệp vụ tại mục 4.2 của Giai đoạn 1b: quote chỉ tính món được chọn, coupon theo danh mục, phí vận chuyển theo món được chọn, từ chối món hết hàng/đổi giá, cơ chế gộp giỏ, rollback lỗi 409 được xếp vào mức **"theo code, chưa xác minh bằng test (chờ DB test)"**.
+- Kiểm thử Playwright mock trong `core-frontend/e2e/cart-badge.spec.js` (ca 6 và 7) chỉ chứng minh frontend phản ứng đúng với dữ liệu mock từ server, không phải là bằng chứng backend thực tế đã ghi/xóa dữ liệu.
+- File `core-frontend/src/context/CartBadge.test.js` đã gắn nhãn rõ ràng: "mô phỏng, không import code thật, không phải bằng chứng xác minh UI/DOM thật" và không tính vào số test đã xác minh hệ thống.
+- Đã rà soát chữ tiếng Anh sót trên giao diện: sửa nút đang lưu đánh giá từ `'Saving?'` thành `'Đang lưu…'` tại `AccountPages.jsx:30`; xác nhận các chuỗi tiếng Anh khác (như `status-pending`) chỉ là tên CSS class hoặc giá trị logic nội bộ.
 
 
 ## Ma trận audit và trạng thái
