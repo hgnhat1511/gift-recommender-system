@@ -168,8 +168,22 @@ async function create(req, res, next) {
 
 const orderSelect = `SELECT o.*, (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) item_count FROM orders o`;
 
+const activeReorders = new Map();
+
 async function reorderMine(req,res,next){
     if(!/^\d+$/.test(String(req.params.id||'')))return res.status(400).json({success:false,message:'Mã đơn hàng không hợp lệ.'});
+    const reorderKey = `${req.user.id}:${req.params.id}`;
+    const now = Date.now();
+    const lastRequest = activeReorders.get(reorderKey);
+    if(lastRequest && now - lastRequest < 2000){
+        return res.status(429).json({success:false,message:'Yêu cầu mua lại đang được xử lý, vui lòng chờ trong giây lát.'});
+    }
+    activeReorders.set(reorderKey, now);
+    if(activeReorders.size > 1000){
+        for(const [k, v] of activeReorders.entries()){
+            if(now - v > 10000) activeReorders.delete(k);
+        }
+    }
     const connection=await pool.getConnection();
     try{
         await connection.beginTransaction();

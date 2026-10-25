@@ -173,3 +173,4 @@ test('Kịch bản 7: Sau khi checkout thành công -> Các món đã đặt b�
   assert.equal(manager.serverCart.items.length, 1);
   assert.equal(manager.serverCart.items[0].productId, 'keep-3');
 });
+

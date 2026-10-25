@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Gift, Mail, LockKeyhole, Eye, EyeOff } from "lucide-react";
 import api, { getApiError, saveAuth } from "../../lib/api.js";
 import { beginGuestCartMerge, clearGuestCartMergePending, completeGuestCartMerge } from "../../lib/guestCart.js";
+import { emitCartChange } from "../../context/CartContext.jsx";
 import "./AuthPages.css";
 
 export default function LoginPage() {
@@ -29,6 +30,7 @@ export default function LoginPage() {
         try {
           await api.post('/cart/merge', pending);
           completeGuestCartMerge(pending.key);
+          emitCartChange();
         } catch (mergeError) {
           if (mergeError.response?.status && mergeError.response.status < 500) clearGuestCartMergePending();
           navigate('/cart', { replace: true, state: { message: getApiError(mergeError, 'Sign-in succeeded, but the guest cart still needs attention.') } });

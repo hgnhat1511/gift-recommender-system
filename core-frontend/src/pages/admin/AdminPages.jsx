@@ -14,6 +14,7 @@ import {
   getProductStatusLabel,
   getDeletionStatusLabel,
   getInventoryReasonLabel,
+  getReviewApprovalLabel,
 } from '../../lib/labels.js';
 import '../store/commerce.css';
 import './admin.css';
@@ -66,7 +67,7 @@ export function AdminReturns(){const {data,error,loading,reload}=useAdminData('/
 }
 
 export function AdminReviews(){const {data,error,loading,reload}=useAdminData('/admin/reviews');const [fail,setFail]=useState('');async function moderate(r,isApproved){try{await api.patch(`/admin/reviews/${r.id}`,{isApproved});await reload()}catch(e){setFail(getApiError(e,'Không cập nhật được đánh giá.'))}}
- return <><Heading title="Đánh giá" description="Ẩn hoặc hiển thị nội dung đánh giá; đánh giá được xác minh theo đơn đã giao."/>{(error||fail)&&<p className="commerce-alert">{error||fail}</p>}<section className="admin-card">{loading?<p>Đang tải…</p>:<div className="admin-table-wrap"><table><thead><tr><th>Sản phẩm</th><th>Khách</th><th>Sao</th><th>Nội dung</th><th>Trạng thái</th><th/></tr></thead><tbody>{(data||[]).map(r=><tr key={r.id}><td>{r.productName}</td><td>{r.customer}</td><td>{'★'.repeat(r.rating)}</td><td>{r.body}</td><td>{r.isApproved?'Hiển thị':'Đã ẩn'}</td><td><button className="commerce-text-button" onClick={()=>moderate(r,!r.isApproved)}>{r.isApproved?'Ẩn':'Hiện'}</button></td></tr>)}</tbody></table></div>}</section></>
+ return <><Heading title="Đánh giá" description="Ẩn hoặc hiển thị nội dung đánh giá; đánh giá được xác minh theo đơn đã giao."/>{(error||fail)&&<p className="commerce-alert">{error||fail}</p>}<section className="admin-card">{loading?<p>Đang tải…</p>:<div className="admin-table-wrap"><table><thead><tr><th>Sản phẩm</th><th>Khách</th><th>Sao</th><th>Nội dung</th><th>Trạng thái</th><th/></tr></thead><tbody>{(data||[]).map(r=><tr key={r.id}><td>{r.productName}</td><td>{r.customer}</td><td>{'★'.repeat(r.rating)}</td><td>{r.body}</td><td>{getReviewApprovalLabel(r.isApproved)}</td><td><button className="commerce-text-button" onClick={()=>moderate(r,!r.isApproved)}>{r.isApproved?'Ẩn':'Hiện'}</button></td></tr>)}</tbody></table></div>}</section></>
 }
 
 const emptyBanner={title:'',subtitle:'',imageUrl:'',targetUrl:'',buttonText:'',isActive:true,sortOrder:0,startsAt:'',endsAt:''};

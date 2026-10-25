@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test src/lib/labels.test.js src/context/CartBadge.test.js",
+    "test:badge-mock": "playwright test -c playwright-mock.config.js",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

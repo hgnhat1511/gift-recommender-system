@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ORDER_STATUS,
   PAYMENT_STATUS,
@@ -15,6 +18,7 @@ import {
   PAYMENT_ATTEMPT_STATUS,
   NOTIFICATION_TYPE,
   INVENTORY_REASON,
+  REVIEW_APPROVAL_STATUS,
   getOrderStatusLabel,
   getPaymentStatusLabel,
   getPaymentMethodLabel,
@@ -29,7 +33,10 @@ import {
   getPaymentAttemptStatusLabel,
   getNotificationTypeLabel,
   getInventoryReasonLabel,
+  getReviewApprovalLabel,
 } from './labels.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('ORDER_STATUS contains all required real enum keys with proper Vietnamese labels', () => {
   assert.equal(ORDER_STATUS.PENDING, 'Chờ xác nhận');
@@ -152,5 +159,42 @@ test('Unknown values return raw string without crashing', () => {
   assert.equal(getPaymentStatusLabel('UNKNOWN_PAYMENT'), 'UNKNOWN_PAYMENT');
   assert.equal(getOrderStatusLabel(''), '');
   assert.equal(getOrderStatusLabel(null), '');
+});
+
+test('All enum values in enums.snapshot.json must have non-empty Vietnamese labels in labels.js', () => {
+  const snapshotRaw = fs.readFileSync(path.join(__dirname, 'enums.snapshot.json'), 'utf8');
+  const snapshot = JSON.parse(snapshotRaw);
+
+  const getterMap = {
+    'orders.status': getOrderStatusLabel,
+    'orders.payment_status': getPaymentStatusLabel,
+    'orders.payment_method': getPaymentMethodLabel,
+    'orders.shipping_method': getShippingMethodLabel,
+    'return_requests.status': getReturnStatusLabel,
+    'users.role': getUserRoleLabel,
+    'users.status': getCustomerStatusLabel,
+    'products.status': getProductStatusLabel,
+    'account_deletion_requests.status': getDeletionStatusLabel,
+    'coupons.discount_type': getCouponDiscountTypeLabel,
+    'payment_attempts.status': getPaymentAttemptStatusLabel,
+  };
+
+  assert.ok(REVIEW_APPROVAL_STATUS[1]);
+  assert.equal(getReviewApprovalLabel(1), 'Đã duyệt');
+  assert.equal(getReviewApprovalLabel(0), 'Chờ duyệt');
+
+  for (const col of snapshot.columns) {
+    const key = `${col.table}.${col.column}`;
+    const getter = getterMap[key];
+    if (!getter) continue;
+    for (const val of col.values) {
+      const label = getter(val);
+      assert.ok(label, `Enum value ${key}="${val}" must have a label`);
+      // Ngoại lệ: VNPAY giữ nguyên tên thương hiệu
+      if (val !== 'VNPAY') {
+        assert.notEqual(label, val, `Enum value ${key}="${val}" must not equal raw key`);
+      }
+    }
+  }
 });
 

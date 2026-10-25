@@ -121,7 +121,48 @@ test('Reorder calculation handles partial stock, inactive items, and current cat
     assert.match(skippedNull.reason, /không còn tồn tại/);
 });
 
-// 5. Test tích hợp có bảo vệ DB (tự động skip khi thiếu TEST_DB_NAME để bảo vệ DB dev)
+// 5. Unit test: Ca reorder kiểm tra vượt trần 99, hết hàng (stock 0), và giỏ đã đầy trần
+test('Reorder calculation caps at 99, rejects out-of-stock, and flags full cart', () => {
+    const { calculateReorderItems } = require('../utils/cartHelper');
+
+    const orderItems = [
+        { product_id: '10', product_name: 'Món mua nhiều', quantity: 15 },
+        { product_id: '11', product_name: 'Món hết hàng', quantity: 2 },
+        { product_id: '12', product_name: 'Món giỏ đã đạt trần kho', quantity: 1 }
+    ];
+
+    const products = [
+        { id: 10, name: 'Món mua nhiều', stock: 200, status: 'ACTIVE', price: 50000 },
+        { id: 11, name: 'Món hết hàng', stock: 0, status: 'ACTIVE', price: 100000 },
+        { id: 12, name: 'Món giỏ đã đạt trần kho', stock: 5, status: 'ACTIVE', price: 70000 }
+    ];
+
+    const cartItems = [
+        { product_id: '10', quantity: 95 }, // Đã có 95 trong giỏ -> dù kho còn 200, trần 99 chỉ cho thêm 4
+        { product_id: '12', quantity: 5 }   // Đã có 5 trong giỏ -> đúng bằng tồn kho 5 -> không thể thêm
+    ];
+
+    const { addedItems, skippedItems } = calculateReorderItems({ orderItems, products, cartItems });
+
+    // Món 10: thêm được min(15, 99 - 95) = 4, targetInCart = 99
+    const item10 = addedItems.find(i => i.productId === '10');
+    assert.ok(item10);
+    assert.equal(item10.quantityAdded, 4);
+    assert.equal(item10.targetInCart, 99);
+    assert.equal(item10.partiallyAdded, true);
+
+    // Món 11: hết hàng (stock 0)
+    const item11 = skippedItems.find(i => i.productId === '11');
+    assert.ok(item11);
+    assert.match(item11.reason, /hết hàng/);
+
+    // Món 12: giỏ đã đạt tối đa hiện có (5/5)
+    const item12 = skippedItems.find(i => i.productId === '12');
+    assert.ok(item12);
+    assert.match(item12.reason, /đã đạt mức tối đa hiện có/);
+});
+
+// 6. Test tích hợp có bảo vệ DB (tự động skip khi thiếu TEST_DB_NAME để bảo vệ DB dev)
 test('Integration: Cart and order inventory checkout atomic rollback (requires TEST_DB_NAME)', {
     skip: process.env.TEST_DB_NAME ? false : 'Skipping DB integration test: TEST_DB_NAME not provided'
 }, async () => {

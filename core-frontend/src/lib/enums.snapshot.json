@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "extracted_at": "2026-10-25T22:57:11+07:00",
+    "query": "SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE = 'enum' ORDER BY TABLE_NAME, COLUMN_NAME;",
+    "database": "gift_ecommerce"
+  },
+  "columns": [
+    {
+      "table": "account_deletion_requests",
+      "column": "status",
+      "type": "enum('PENDING','REVIEWED','REJECTED')",
+      "values": ["PENDING", "REVIEWED", "REJECTED"]
+    },
+    {
+      "table": "coupons",
+      "column": "discount_type",
+      "type": "enum('PERCENT','FIXED')",
+      "values": ["PERCENT", "FIXED"]
+    },
+    {
+      "table": "orders",
+      "column": "payment_method",
+      "type": "enum('COD','VNPAY')",
+      "values": ["COD", "VNPAY"]
+    },
+    {
+      "table": "orders",
+      "column": "payment_status",
+      "type": "enum('UNPAID','PAID','REFUNDED')",
+      "values": ["UNPAID", "PAID", "REFUNDED"]
+    },
+    {
+      "table": "orders",
+      "column": "shipping_method",
+      "type": "enum('STANDARD','EXPRESS')",
+      "values": ["STANDARD", "EXPRESS"]
+    },
+    {
+      "table": "orders",
+      "column": "status",
+      "type": "enum('PENDING','CONFIRMED','PROCESSING','SHIPPED','DELIVERED','CANCELLED')",
+      "values": ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]
+    },
+    {
+      "table": "payment_attempts",
+      "column": "status",
+      "type": "enum('PENDING','SUCCEEDED','FAILED','EXPIRED','REVIEW')",
+      "values": ["PENDING", "SUCCEEDED", "FAILED", "EXPIRED", "REVIEW"]
+    },
+    {
+      "table": "product_events",
+      "column": "event_type",
+      "type": "enum('VIEW','SEARCH','FAVORITE','CART_ADD','PURCHASE','RECOMMENDATION_CLICK')",
+      "values": ["VIEW", "SEARCH", "FAVORITE", "CART_ADD", "PURCHASE", "RECOMMENDATION_CLICK"]
+    },
+    {
+      "table": "products",
+      "column": "status",
+      "type": "enum('ACTIVE','INACTIVE')",
+      "values": ["ACTIVE", "INACTIVE"]
+    },
+    {
+      "table": "return_requests",
+      "column": "status",
+      "type": "enum('PENDING','APPROVED','REJECTED','COMPLETED')",
+      "values": ["PENDING", "APPROVED", "REJECTED", "COMPLETED"]
+    },
+    {
+      "table": "users",
+      "column": "role",
+      "type": "enum('USER','STAFF','ADMIN')",
+      "values": ["USER", "STAFF", "ADMIN"]
+    },
+    {
+      "table": "users",
+      "column": "status",
+      "type": "enum('ACTIVE','LOCKED')",
+      "values": ["ACTIVE", "LOCKED"]
+    }
+  ]
+}
+

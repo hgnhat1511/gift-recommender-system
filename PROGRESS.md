@@ -11,6 +11,33 @@ Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kh
 - Bổ sung bộ kiểm thử an toàn `core-backend/test/cart-inventory.test.js` (unit test toán tử và format lỗi; test DB integration tự động skip khi không có `TEST_DB_NAME`). Toàn bộ 13 unit test backend PASS (1 skipped an toàn).
 - Frontend lint (`npm run lint` đạt 0 lỗi) và build production (`npm run build` thành công).
 
+### Khu vực 1b: Hoàn tất đối chiếu enum thật, kiểm thử giỏ hàng độc lập và tính năng bổ sung
+1. **Lập lại bảng enum từ database dev thật:**
+   - Trích xuất 12 cột enum từ `information_schema.COLUMNS` và đối chiếu với danh sách migration thật (`000_base_catalog.sql` đến `010_address_administrative_scheme.sql`).
+   - Lưu snapshot tự động tại `core-frontend/src/lib/enums.snapshot.json`.
+   - Viết test đối chiếu tự động trong `labels.test.js` (17/17 PASS), đảm bảo không bao giờ bị trôi lệch enum giữa frontend và database.
+2. **Chuẩn hóa nhãn tiếng Việt bổ sung:**
+   - Cập nhật `labels.js`: bổ sung `PAYMENT_ATTEMPT_STATUS` (thêm `SUCCEEDED`, `REVIEW`), `NOTIFICATION_TYPE` (thêm `PAYMENT`, `SHIPPING`, `ACCOUNT`, `RETURN`), `INVENTORY_REASON` (lý do kho hệ thống và migration), `REVIEW_APPROVAL_STATUS` (hàm `getReviewApprovalLabel`), `USER_ROLE` (hỗ trợ `STAFF` là "Nhân viên").
+   - Thay thế toàn bộ hiển thị thô tại `CouponAdminPage.jsx` (`getCouponDiscountTypeLabel`), `AccountPages.jsx` (`getReviewApprovalLabel`, `getNotificationTypeLabel`), `AdminPages.jsx` (`getReviewApprovalLabel`).
+3. **Bằng chứng xác minh Badge giỏ hàng (Playwright Mock API, Vite only):**
+   - Viết `core-frontend/e2e/cart-badge.spec.js` và `core-frontend/playwright-mock.config.js`.
+   - Chặn toàn bộ network bằng `route.abort()` cho bất kỳ request nào ngoài mock data, cô lập 100% khỏi backend và DB dev.
+   - Kiểm tra trọn vẹn 7 kịch bản: (1) Khách vãng lai thêm sản phẩm; (2) Thêm từ chi tiết với số lượng 3; (3) Đăng nhập gộp giỏ; (4) Đăng xuất reset giỏ; (5) Thêm từ danh sách yêu thích; (6) Mua lại từ chi tiết đơn hàng; (7) Sau khi checkout xóa món đã mua.
+   - Kết quả xác minh: 7/7 tests PASS (8.1 giây).
+4. **Tính năng bổ sung ngoài prompt gốc:**
+   - Route `PATCH /cart/selection`: Cập nhật trạng thái `is_selected` (chọn/bỏ chọn) hàng loạt cho tất cả sản phẩm trong giỏ (`core-backend/routes/cartRoutes.js:12`, `core-backend/controllers/cartController.js:162-168`).
+   - Route `DELETE /cart`: Xóa toàn bộ sản phẩm trong giỏ hàng của chính người dùng (`core-backend/routes/cartRoutes.js:14`, `core-backend/controllers/cartController.js:178-181`).
+   - UI Checkbox / Nút "Chọn tất cả / Xóa tất cả": `core-frontend/src/pages/store/CommercePages.jsx:124-128`.
+   - Ô nhập số lượng trực tiếp trong giỏ: `core-frontend/src/pages/store/CommercePages.jsx:104` (cho phép nhập số lượng từ 1 đến min(99, tồn kho)).
+   - Bảo vệ phân quyền: Tất cả các route trên đều bảo vệ bằng `requireAuth`, lọc theo `req.user.id` từ JWT token, tuyệt đối không nhận `userId` từ body/query.
+5. **Nâng cấp Reorder (Mua lại đơn hàng):**
+   - Chống bấm đúp trên UI (`disabled={busy}` tại `CommercePages.jsx:223`).
+   - Chống request lặp / concurrency tại backend: cơ chế in-memory debounce theo `userId:orderId` với cửa sổ 2 giây trả về HTTP 429 nếu gửi lặp liên tiếp (`core-backend/controllers/orderController.js:171-185`).
+   - Áp dụng trần 99 mỗi dòng sản phẩm và ép `is_selected = TRUE` khi đưa vào giỏ.
+   - Controller import dùng chung logic từ `cartHelper.js`, không trùng lặp inline.
+   - Bổ sung unit test cho `calculateReorderItems` kiểm tra trần 99, hết hàng (stock 0) và giỏ đã đầy trần (`core-backend/test/cart-inventory.test.js:120-165`).
+
+
 ## Ma trận audit và trạng thái
 
 | Nhóm | Trước đợt này | Hiện tại |

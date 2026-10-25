@@ -68,6 +68,7 @@ export const SHIPMENT_STATUS = Object.freeze({
 export const CUSTOMER_STATUS = Object.freeze({
   ACTIVE: 'Hoạt động',
   LOCKED: 'Đã khóa',
+  INACTIVE: 'Ngừng hoạt động',
 });
 
 export const USER_ROLE = Object.freeze({
@@ -96,6 +97,7 @@ export const COUPON_DISCOUNT_TYPE = Object.freeze({
 export const PAYMENT_ATTEMPT_STATUS = Object.freeze({
   PENDING: 'Chờ thanh toán',
   SUCCEEDED: 'Thành công',
+  SUCCESS: 'Thành công',
   FAILED: 'Thất bại',
   EXPIRED: 'Hết hạn',
   REVIEW: 'Cần đối soát',
@@ -107,13 +109,30 @@ export const NOTIFICATION_TYPE = Object.freeze({
   ACCOUNT: 'Tài khoản',
   RETURN: 'Đổi trả',
   PAYMENT: 'Thanh toán',
+  PROMOTION: 'Khuyến mãi',
+  SYSTEM: 'Hệ thống',
 });
 
 export const INVENTORY_REASON = Object.freeze({
   'Customer order': 'Đơn hàng của khách',
   'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
+  'Return completed; stock restocked': 'Đổi trả; nhập lại kho',
   'Customer return; stock restored': 'Đổi trả; nhập lại kho',
+  'Initial product stock': 'Tồn kho ban đầu',
   'Admin stock adjustment': 'Quản trị viên điều chỉnh',
+  PURCHASE: 'Nhập hàng',
+  SALE: 'Bán hàng',
+  RETURN: 'Đổi trả hàng',
+  ADJUSTMENT: 'Kiểm kê điều chỉnh',
+});
+
+export const REVIEW_APPROVAL_STATUS = Object.freeze({
+  0: 'Chờ duyệt',
+  1: 'Đã duyệt',
+  false: 'Chờ duyệt',
+  true: 'Đã duyệt',
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
 });
 
 /**
@@ -194,5 +213,9 @@ export function getNotificationTypeLabel(type) {
 
 export function getInventoryReasonLabel(reason) {
   return lookup(INVENTORY_REASON, reason, 'inventory_reason');
+}
+
+export function getReviewApprovalLabel(isApproved) {
+  return lookup(REVIEW_APPROVAL_STATUS, isApproved, 'review_approval_status');
 }
 
