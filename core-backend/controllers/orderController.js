@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const pool = require('../config/db');
+const vnpay = require('../services/payments/vnpay');
 
 const cents = (value) => Math.round(Number(value) * 100);
 const amount = (value) => Number((value / 100).toFixed(2));
@@ -74,21 +75,26 @@ async function quote(req, res, next) {
 }
 
 async function create(req, res, next) {
+    const paymentMethod = req.body?.paymentMethod || 'COD';
     if (!/^\d+$/.test(String(req.body?.addressId || '')) ||
         (req.body?.couponCode != null && (typeof req.body.couponCode !== 'string' || req.body.couponCode.length > 40)) ||
         (req.body?.note != null && (typeof req.body.note !== 'string' || req.body.note.length > 1000)) ||
         (req.body?.shippingMethod != null && !Object.hasOwn(shippingMethods, req.body.shippingMethod)) ||
-        (req.body?.paymentMethod && req.body.paymentMethod !== 'COD')) {
-        return res.status(400).json({ success:false,message:'Invalid checkout information. Choose a supported delivery method; COD is the only available payment method.' });
+        !['COD','VNPAY'].includes(paymentMethod)) {
+        return res.status(400).json({ success:false,message:'Invalid checkout information. Choose a supported delivery and payment method.' });
     }
+    if(paymentMethod==='VNPAY'&&!vnpay.isConfigured())return res.status(503).json({success:false,message:'Online payment is not configured for this environment.'});
     const requestKey=req.get('Idempotency-Key')?.trim()||null;
     if(requestKey&&(!/^[A-Za-z0-9:_-]{8,100}$/.test(requestKey)))return res.status(400).json({success:false,message:'Invalid Idempotency-Key.'});
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         if(requestKey){
-            const [existing]=await connection.execute('SELECT id,order_code,status,total_amount,shipping_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1 FOR UPDATE',[req.user.id,requestKey]);
-            if(existing[0]){await connection.commit();return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing[0].id),orderCode:existing[0].order_code,status:existing[0].status,paymentMethod:'COD',shippingMethod:existing[0].shipping_method||'STANDARD',total:Number(existing[0].total_amount)}})}
+            // This is a read-only idempotency lookup. Locking a missing unique-key range
+            // can deadlock unrelated checkouts that are reserving the same product.
+            // The unique index and ER_DUP_ENTRY recovery below serialize same-key retries.
+            const [existing]=await connection.execute('SELECT id,order_code,status,total_amount,shipping_method,payment_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1',[req.user.id,requestKey]);
+            if(existing[0]){await connection.commit();return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing[0].id),orderCode:existing[0].order_code,status:existing[0].status,paymentMethod:existing[0].payment_method,shippingMethod:existing[0].shipping_method||'STANDARD',total:Number(existing[0].total_amount)}})}
         }
         const totals = await quoteTotals(connection,req.user.id,req.body.addressId,req.body.couponCode,true,req.body.shippingMethod||'STANDARD');
         if (totals.error) { await connection.rollback(); return res.status(409).json({ success:false,message:totals.error }); }
@@ -96,8 +102,8 @@ async function create(req, res, next) {
         const address = totals.address;
         const [created] = await connection.execute(`INSERT INTO orders
             (order_code,idempotency_key,user_id,status,payment_method,shipping_method,payment_status,recipient_name,phone,shipping_address,customer_note,coupon_code,subtotal,discount_amount,shipping_fee,total_amount)
-            VALUES (?,?,?, 'PENDING','COD',?,'UNPAID',?,?,?,?,?,?,?,?,?)`,
-            [orderCode,requestKey,req.user.id,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city }),req.body.note?.trim() || null,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
+            VALUES (?,?,?, 'PENDING',?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
+            [orderCode,requestKey,req.user.id,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),req.body.note?.trim() || null,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
         const orderId = created.insertId;
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Order placed by customer']);
         for (const item of totals.items) {
@@ -113,13 +119,13 @@ async function create(req, res, next) {
             await connection.execute('INSERT INTO coupon_uses (coupon_id,user_id,order_id,discount_amount) VALUES (?,?,?,?)', [totals.coupon.id,req.user.id,orderId,amount(totals.discountCents)]);
         }
         await connection.execute('DELETE FROM cart_items WHERE user_id=? AND is_selected=1', [req.user.id]);
-        await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận với hình thức thanh toán khi nhận hàng.`,orderId]);
+        await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận. Phương thức thanh toán: ${paymentMethod}.`,orderId]);
         await connection.commit();
-        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:'PENDING',paymentMethod:'COD',shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
+        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:'PENDING',paymentMethod,shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
     } catch (error) {
         await connection.rollback();
         if(error.code==='ER_DUP_ENTRY'&&requestKey){
-            try{const [[existing]]=await pool.execute('SELECT id,order_code,status,total_amount,shipping_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1',[req.user.id,requestKey]);if(existing)return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing.id),orderCode:existing.order_code,status:existing.status,paymentMethod:'COD',shippingMethod:existing.shipping_method||'STANDARD',total:Number(existing.total_amount)}})}catch(readError){return next(readError)}
+            try{const [[existing]]=await pool.execute('SELECT id,order_code,status,total_amount,shipping_method,payment_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1',[req.user.id,requestKey]);if(existing)return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing.id),orderCode:existing.order_code,status:existing.status,paymentMethod:existing.payment_method,shippingMethod:existing.shipping_method||'STANDARD',total:Number(existing.total_amount)}})}catch(readError){return next(readError)}
         }
         if (error.httpStatus) return res.status(error.httpStatus).json({ success:false,message:error.message });
         return next(error);
@@ -188,7 +194,14 @@ async function getOrderData(connection, orderId, whereClause, params) {
     const [items]=await connection.execute('SELECT id,product_id,product_name,image_url,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id',[orderId]);
     const [history]=await connection.execute('SELECT from_status,to_status,note,created_at FROM order_status_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
     const [shippingHistory]=await connection.execute('SELECT carrier,tracking_number,note,created_at FROM order_shipping_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
-    return orderView(orders[0],items.map((row)=>({id:String(row.id),productId:row.product_id==null?null:String(row.product_id),name:row.product_name,imageUrl:row.image_url,unitPrice:Number(row.unit_price),quantity:Number(row.quantity),lineTotal:Number(row.line_total)})),history,shippingHistory.map((row)=>({carrier:row.carrier,trackingNumber:row.tracking_number,note:row.note,createdAt:row.created_at})));
+    const [shipmentEvents]=await connection.execute(`SELECT s.provider,s.tracking_number,e.provider_status,e.normalized_status,
+        DATE_FORMAT(e.occurred_at,'%Y-%m-%dT%H:%i:%sZ') occurred_at
+        FROM shipments s JOIN shipment_events e ON e.shipment_id=s.id WHERE s.order_id=? ORDER BY e.occurred_at,e.id`,[orderId]);
+    const unifiedShippingHistory=[
+        ...shippingHistory.map((row)=>({carrier:row.carrier,trackingNumber:row.tracking_number,note:row.note,createdAt:row.created_at})),
+        ...shipmentEvents.map((row)=>({carrier:row.provider,trackingNumber:row.tracking_number,note:`${row.provider_status||'Status update'} · ${row.normalized_status}`,createdAt:row.occurred_at}))
+    ].sort((left,right)=>new Date(left.createdAt)-new Date(right.createdAt));
+    return orderView(orders[0],items.map((row)=>({id:String(row.id),productId:row.product_id==null?null:String(row.product_id),name:row.product_name,imageUrl:row.image_url,unitPrice:Number(row.unit_price),quantity:Number(row.quantity),lineTotal:Number(row.line_total)})),history,unifiedShippingHistory);
 }
 
 async function detailMine(req,res,next){
@@ -201,7 +214,7 @@ async function cancelMine(req,res,next){
         await connection.beginTransaction();
         const [orders]=await connection.execute('SELECT * FROM orders WHERE id=? AND user_id=? FOR UPDATE',[req.params.id,req.user.id]);
         const order=orders[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(order.status!=='PENDING'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending orders can be cancelled by the customer.'})}
+        if(order.status!=='PENDING'||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending unpaid orders can be cancelled by the customer.'})}
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,'PENDING','CANCELLED','Cancelled by customer']);

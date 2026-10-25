@@ -41,6 +41,9 @@ async function changePassword(req, res, next) {
 const addressFields = ['recipientName','phone','addressLine','ward','district','city'];
 function validateAddress(body) {
     if (!body || addressFields.some((field) => ['recipientName','phone','addressLine','city'].includes(field) && (typeof body[field] !== 'string' || !body[field].trim()))) return false;
+    if (body.isNewAdministrativeAddress !== undefined && typeof body.isNewAdministrativeAddress !== 'boolean') return false;
+    if (body.isNewAdministrativeAddress === true && (typeof body.ward !== 'string' || !body.ward.trim())) return false;
+    if (body.isNewAdministrativeAddress === false && (!body.district || typeof body.district !== 'string' || !body.district.trim())) return false;
     return body.recipientName.length <= 120 && body.phone.length <= 30 && body.addressLine.length <= 255 &&
         body.city.length <= 100 && (body.ward == null || (typeof body.ward === 'string' && body.ward.length <= 100)) &&
         (body.district == null || (typeof body.district === 'string' && body.district.length <= 100));
@@ -55,7 +58,8 @@ async function listAddresses(req, res, next) {
 
 function addressView(row) {
     return { id: String(row.id), recipientName: row.recipient_name, phone: row.phone, addressLine: row.address_line,
-        ward: row.ward, district: row.district, city: row.city, isDefault: Boolean(row.is_default) };
+        ward: row.ward, district: row.district, city: row.city,
+        isNewAdministrativeAddress: Boolean(row.is_new_administrative_address), isDefault: Boolean(row.is_default) };
 }
 
 async function createAddress(req, res, next) {
@@ -67,8 +71,8 @@ async function createAddress(req, res, next) {
         if (Number(count.total) >= 20) { await connection.rollback(); return res.status(400).json({ success: false, message: 'You can save up to 20 addresses.' }); }
         const isDefault = Boolean(req.body.isDefault) || Number(count.total) === 0;
         if (isDefault) await connection.execute('UPDATE addresses SET is_default=0 WHERE user_id=?', [req.user.id]);
-        const [created] = await connection.execute(`INSERT INTO addresses (user_id,recipient_name,phone,address_line,ward,district,city,is_default)
-            VALUES (?,?,?,?,?,?,?,?)`, [req.user.id,req.body.recipientName.trim(),req.body.phone.trim(),req.body.addressLine.trim(),req.body.ward?.trim() || null,req.body.district?.trim() || null,req.body.city.trim(),isDefault]);
+        const [created] = await connection.execute(`INSERT INTO addresses (user_id,recipient_name,phone,address_line,ward,district,city,is_new_administrative_address,is_default)
+            VALUES (?,?,?,?,?,?,?,?,?)`, [req.user.id,req.body.recipientName.trim(),req.body.phone.trim(),req.body.addressLine.trim(),req.body.ward?.trim() || null,req.body.district?.trim() || null,req.body.city.trim(),Boolean(req.body.isNewAdministrativeAddress),isDefault]);
         await connection.commit();
         const [[row]] = await pool.execute('SELECT * FROM addresses WHERE id=? AND user_id=?', [created.insertId,req.user.id]);
         return res.status(201).json({ success: true, data: addressView(row) });
@@ -84,8 +88,8 @@ async function updateAddress(req, res, next) {
         const [owned] = await connection.execute('SELECT id FROM addresses WHERE id=? AND user_id=? FOR UPDATE', [req.params.id,req.user.id]);
         if (!owned[0]) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Address not found.' }); }
         if (req.body.isDefault) await connection.execute('UPDATE addresses SET is_default=0 WHERE user_id=?', [req.user.id]);
-        await connection.execute(`UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=IF(?,1,is_default)
-            WHERE id=? AND user_id=?`, [req.body.recipientName.trim(),req.body.phone.trim(),req.body.addressLine.trim(),req.body.ward?.trim() || null,req.body.district?.trim() || null,req.body.city.trim(),Boolean(req.body.isDefault),req.params.id,req.user.id]);
+        await connection.execute(`UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_new_administrative_address=?,is_default=IF(?,1,is_default)
+            WHERE id=? AND user_id=?`, [req.body.recipientName.trim(),req.body.phone.trim(),req.body.addressLine.trim(),req.body.ward?.trim() || null,req.body.district?.trim() || null,req.body.city.trim(),Boolean(req.body.isNewAdministrativeAddress),Boolean(req.body.isDefault),req.params.id,req.user.id]);
         await connection.commit();
         const [[row]] = await pool.execute('SELECT * FROM addresses WHERE id=? AND user_id=?', [req.params.id,req.user.id]);
         return res.json({ success: true, data: addressView(row) });

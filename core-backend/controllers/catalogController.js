@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const {recommendProducts}=require('../services/recommendationService');
+const {recommendProducts,askMlGiftFinder}=require('../services/recommendationService');
 
 const present = (row) => row && ({
     id: String(row.id), categoryId: row.category_id == null ? null : String(row.category_id),
@@ -162,7 +162,13 @@ async function finder(req, res, next) {
                 const [kind, label] = value.split(':');
                 return kind === 'occasion' ? `Đúng dịp ${label}` : kind === 'recipient' ? `Phù hợp người nhận ${label}` : kind === 'interest' ? `Khớp sở thích ${label}` : kind === 'style' ? `Đúng phong cách ${label}` : kind === 'type' ? `Đúng loại quà ${label}` : kind === 'budget' ? `Trong ngân sách ${Number(budget).toLocaleString('vi-VN')} ₫` : `Khớp nội dung ${query}`;
             }) }));
-        return res.json({ success: true, data: { items: scored, method: 'content_match', total: scored.length } });
+        const eligibleIds=new Set(scored.map((item)=>item.id));
+        const pythonCandidates=rows.filter((row)=>eligibleIds.has(String(row.id)));
+        const pythonRanking=await askMlGiftFinder(pythonCandidates,{occasion,recipient,interests,style,giftType,query,budget});
+        const items=pythonRanking
+            ? pythonRanking.map(({product,reasons})=>({...present(product),reasons}))
+            : scored;
+        return res.json({ success: true, data: { items, method: pythonRanking ? 'python_content_baseline' : 'content_match', total: items.length } });
     } catch (error) { return next(error); }
 }
 

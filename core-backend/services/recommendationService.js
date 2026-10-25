@@ -10,6 +10,73 @@ const eventWeight = {
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 
+function mlProduct(product, maxPopularity = 1, maxRating = 1) {
+    return {
+        id:String(product.id),name:product.name||'',description:product.description||'',status:product.status,
+        stock:Number(product.stock),price:Number(product.price),categoryId:product.category_id??product.categoryId,
+        occasionTags:jsonList(product.occasion_tags??product.occasionTags),recipientTags:jsonList(product.recipient_tags??product.recipientTags),
+        interestTags:jsonList(product.interest_tags??product.interestTags),style:product.style,giftType:product.gift_type??product.giftType,
+        isFeatured:Boolean(product.is_featured??product.isFeatured),
+        popularityScore:Number(product.event_count||0)/maxPopularity,ratingScore:Number(product.average_rating||0)/maxRating
+    };
+}
+
+function mlPayload(ranked, profile, limit) {
+    const preferences = {};
+    for (const [group, values] of Object.entries(profile)) {
+        const max = Math.max(0,...[...values.values()].map((item)=>item.weight));
+        preferences[group] = Object.fromEntries([...values.values()].map((item)=>[item.label,max?Math.min(1,item.weight/max):0]));
+    }
+    const maxPopularity=Math.max(1,...ranked.map(({product})=>Number(product.event_count||0)));
+    const maxRating=Math.max(1,...ranked.map(({product})=>Number(product.average_rating||0)));
+    return {limit,preferences,products:ranked.map(({product})=>mlProduct(product,maxPopularity,maxRating))};
+}
+
+function applyMlRanking(ranked, response) {
+    if(!Array.isArray(response?.items))return null;
+    const byId=new Map(ranked.map((item)=>[String(item.product.id),item.product]));
+    const seen=new Set();
+    const items=[];
+    for(const result of response.items){
+        const id=String(result?.id||'');
+        if(!byId.has(id)||seen.has(id)||!Array.isArray(result.reasons)||result.reasons.some((reason)=>typeof reason!=='string'))return null;
+        seen.add(id);items.push({product:byId.get(id),reasons:result.reasons});
+    }
+    return items;
+}
+
+async function askMlRanking(path, ranked, payload) {
+    const base=process.env.ML_SERVICE_URL;
+    if(!base)return null;
+    const timeout=Math.max(100,Math.min(5000,Number(process.env.ML_SERVICE_TIMEOUT_MS)||1500));
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),timeout);
+    try{
+        const response=await fetch(new URL(path,base),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+        if(!response.ok)return null;
+        const result=await response.json();
+        return applyMlRanking(ranked,result);
+    }catch{return null}finally{clearTimeout(timer)}
+}
+
+async function askMlService(ranked, profile, limit) {
+    return askMlRanking('/recommendations',ranked,mlPayload(ranked,profile,limit));
+}
+
+async function askMlGiftFinder(products, criteria) {
+    const ranked=products.map((product)=>({product}));
+    const preferences={};
+    if(criteria.occasion)preferences.occasions={[criteria.occasion]:1};
+    if(criteria.recipient)preferences.recipients={[criteria.recipient]:1};
+    if(criteria.interests?.length)preferences.interests=Object.fromEntries(criteria.interests.map((value)=>[value,1]));
+    if(criteria.style)preferences.styles={[criteria.style]:1};
+    if(criteria.giftType)preferences.giftTypes={[criteria.giftType]:1};
+    const maxPopularity=Math.max(1,...products.map((product)=>Number(product.event_count||0)));
+    const maxRating=Math.max(1,...products.map((product)=>Number(product.average_rating||0)));
+    const payload={limit:12,preferences,context:{occasion:criteria.occasion,recipient:criteria.recipient,budget:criteria.budget,query:criteria.query},products:products.map((product)=>mlProduct(product,maxPopularity,maxRating))};
+    return askMlRanking('/gift-finder',ranked,payload);
+}
+
 function jsonList(value) {
     if (Array.isArray(value)) return value;
     if (typeof value !== 'string' || !value) return [];
@@ -175,11 +242,13 @@ async function recommendProducts(userId, limit) {
         product,
         reasons: reasons.length ? reasons : ['S\u1ea3n ph\u1ea9m c\u00f2n h\u00e0ng trong catalog']
     }));
+    const pythonItems=await askMlService(ranked,profile,limit);
     return {
         method: isPersonalized ? 'personalized_activity' : 'popular_cold_start',
-        items,
-        total: items.length
+        items:pythonItems||items,
+        total:pythonItems?pythonItems.length:items.length,
+        source:pythonItems?'python_content_baseline':'node_fallback'
     };
 }
 
-module.exports = { recommendProducts };
+module.exports = { recommendProducts,mlPayload,applyMlRanking,askMlService,askMlGiftFinder };

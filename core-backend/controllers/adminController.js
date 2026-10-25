@@ -121,7 +121,7 @@ function productInput(body){
         !Number.isFinite(Number(price))||Number(price)<0||Number(price)>9999999999||
         !Number.isInteger(Number(stock))||Number(stock)<0||Number(stock)>4294967295||
         (categoryId!=null&&categoryId!==''&&!validId(categoryId))||
-        (imageUrl!=null&&imageUrl!==''&&!/^https?:\/\//i.test(imageUrl))||
+        (imageUrl!=null&&imageUrl!==''&&(typeof imageUrl!=='string'||imageUrl.length>500||!/^https?:\/\//i.test(imageUrl)))||
         !['ACTIVE','INACTIVE'].includes(status)||
         !Array.isArray(occasionTags)||!Array.isArray(recipientTags)||!Array.isArray(interestTags)||
         [...occasionTags,...recipientTags,...interestTags].some((v)=>typeof v!=='string'||v.length>80)||
@@ -298,6 +298,7 @@ async function updateOrderStatus(req,res,next){
         const [rows]=await connection.execute('SELECT * FROM orders WHERE id=? FOR UPDATE',[req.params.id]);
         const order=rows[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
         if(!transitions[order.status].includes(status)){await connection.rollback();return res.status(409).json({success:false,message:`Order cannot move from ${order.status} to ${status}.`})}
+        if(status==='CANCELLED'&&order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Paid orders cannot be cancelled until a refund workflow is available.'})}
         if(status==='CANCELLED'){await restoreStock(connection,order.id,req.user.id);await releaseCoupon(connection,order.id)}
         await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[status,status,order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Status updated by admin']);
@@ -473,7 +474,8 @@ async function updateReturn(req,res,next){
         const [rows]=await connection.execute('SELECT * FROM return_requests WHERE id=? FOR UPDATE',[req.params.id]);
         const request=rows[0];
         if(!request){await connection.rollback();return res.status(404).json({success:false,message:'Return request not found.'})}
-        if(request.status!=='PENDING'&&!(request.status==='APPROVED'&&status==='COMPLETED')){await connection.rollback();return res.status(409).json({success:false,message:'This return request has already been resolved.'})}
+        const transitionAllowed=request.status==='PENDING'?['APPROVED','REJECTED'].includes(status):request.status==='APPROVED'&&status==='COMPLETED';
+        if(!transitionAllowed){await connection.rollback();return res.status(409).json({success:false,message:'This return request cannot move to the requested status.'})}
         if(status==='COMPLETED'){
             const [items]=await connection.execute('SELECT product_id,quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL',[request.order_id]);
             for(const item of items){
@@ -485,7 +487,7 @@ async function updateReturn(req,res,next){
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'RETURN','Cập nhật yêu cầu đổi trả',?,?)",[request.user_id,adminNote?.trim()||`Yêu cầu đổi trả: ${status}.`,request.order_id]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'RETURN_DECISION','return',request.id,JSON.stringify({status,adminNote:adminNote||null,restocked:status==='COMPLETED'})]);
         await connection.commit();
-        return res.json({success:true,data:{id:String(request.id),status,restocked:status==='COMPLETED'}});
+        return res.json({success:true,data:{id:String(request.id),status,restocked:status==='COMPLETED',refundProcessed:false}});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
 async function listReviews(req,res,next){try{const [rows]=await pool.query(`SELECT r.*,p.name product_name,u.full_name customer FROM reviews r JOIN products p ON p.id=r.product_id JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC LIMIT 200`);return res.json({success:true,data:rows.map(r=>({id:String(r.id),productId:String(r.product_id),productName:r.product_name,userId:String(r.user_id),customer:r.customer,rating:Number(r.rating),body:r.body,isApproved:Boolean(r.is_approved),createdAt:r.created_at}))})}catch(error){return next(error)}}

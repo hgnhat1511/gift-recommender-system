@@ -3,6 +3,14 @@
 !.env.example
 **/node_modules/
 **/dist/
+**/test-results/
+**/playwright-report/
+**/playwright/.cache/
 **/.venv/
 **/__pycache__/
 *.pyc
+*.pkl
+*.joblib
+**/coverage/
+**/*.log
+**/.pytest_cache/

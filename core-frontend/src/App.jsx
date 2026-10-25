@@ -193,8 +193,8 @@ function App() {
           <div className="hero-visual">
             <div className="hero-image-wrap">
               <img
-                src="https://images.unsplash.com/photo-1513883049090-d0b7439799bf?auto=format&fit=crop&w=1100&q=90"
-                alt="Hộp quà được gói đẹp mắt"
+                src="https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=1000&q=80"
+                alt="Hộp quà trang nhã"
               />
             </div>
             <div className="floating-card floating-card-top">

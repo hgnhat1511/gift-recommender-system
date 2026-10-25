@@ -1,6 +1,7 @@
 const express=require('express');
 const admin=require('../controllers/adminController');
 const {requireAuth,requireRole}=require('../middleware/authMiddleware');
+const {createGhnShipment}=require('../controllers/shipmentController');
 const router=express.Router();
 router.use(requireAuth,requireRole('ADMIN'));
 router.get('/dashboard',admin.dashboard);
@@ -22,6 +23,7 @@ router.get('/orders',admin.listOrders);
 router.get('/orders/:id',admin.adminOrderDetail);
 router.patch('/orders/:id/status',admin.updateOrderStatus);
 router.patch('/orders/:id/shipping',admin.updateShipping);
+router.post('/orders/:orderId/shipments/ghn',createGhnShipment);
 router.get('/customers',admin.listCustomers);
 router.patch('/customers/:id/status',admin.setCustomerStatus);
 router.patch('/customers/:id/role',admin.setUserRole);
