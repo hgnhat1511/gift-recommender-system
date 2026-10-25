@@ -9,6 +9,7 @@ router.post('/items', cart.add);
 router.post('/merge', cart.merge);
 router.patch('/items/:itemId', cart.update);
 router.patch('/items/:itemId/selection', cart.updateSelection);
+router.patch('/selection', cart.updateAllSelection);
 router.delete('/items/:itemId', cart.remove);
 router.delete('/', cart.clear);
 module.exports = router;

@@ -121,6 +121,16 @@ export function completeGuestCartMerge(key) {
   return true;
 }
 
+export function setGuestCartAllSelected(selected) {
+  const state = readState();
+  if (state.pendingMerge) return false;
+  for (const item of state.items) {
+    item.selected = Boolean(selected);
+  }
+  writeState(state);
+  return true;
+}
+
 export function clearGuestCart() {
   writeState({ id: createId(), items: [], pendingMerge: null });
 }

@@ -192,3 +192,12 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 - **Việc ghi nhận để làm sau:**
   1. KPI "Đã giao hàng" trên Admin Dashboard cần được tách lại khi hệ thống bổ sung trạng thái `COMPLETED` cho đơn hàng (thực hiện ở Giai đoạn 4).
   2. Quy tắc nhãn "Chờ thanh toán" cho đơn `PENDING` + `UNPAID` cần bổ sung phương thức `BANK_TRANSFER` khi tích hợp chuyển khoản VCB (thực hiện ở Giai đoạn 8).
+
+### 2026-10-25 - Khu vực 1: Hoàn thiện Giỏ hàng và Mua lại (Reorder)
+- Đã khắc phục triệt để lỗi "Mua lại đơn hàng":
+  + Backend: Xử lý theo cơ chế thêm từng sản phẩm với `min(số lượng cũ, tồn còn lại − số đã có trong giỏ)`, dùng giá hiện tại từ bảng `products`, đánh dấu `is_selected = TRUE`, hỗ trợ mọi trạng thái đơn hàng của chính user, trả về danh sách chi tiết các món thêm thành công và các món bị bỏ qua do hết hàng/ngừng bán kèm lý do tiếng Việt.
+  + Frontend: Gọi `emitCartChange()`, tự động chuyển hướng sang `/cart` kèm thông báo kết quả chi tiết; nếu không thêm được món nào thì hiển thị lỗi và ở lại trang.
+- Đã bổ sung thanh công cụ giỏ hàng: Chọn/bỏ chọn tất cả sản phẩm (`PATCH /cart/selection`), Xóa toàn bộ giỏ (`DELETE /cart`), ô nhập số lượng trực tiếp (giới hạn 1 đến 99 và không vượt tồn kho).
+- Đã tách helper kiểm tra giỏ hàng và reorder độc lập tại `core-backend/utils/cartHelper.js`. File unit test `core-backend/test/cart-inventory.test.js` import trực tiếp code thật từ helper/controller (không còn mock trùng tên).
+- Đã viết unit test chứng minh 7 kịch bản cập nhật badge giỏ hàng tại `core-frontend/src/context/CartBadge.test.js` (16/16 frontend unit tests pass).
+- Toàn bộ backend unit tests 20/20 pass (18 pass, 2 skip do TEST_DB_NAME), frontend lint 0 lỗi, build pass trong ~1.0s.

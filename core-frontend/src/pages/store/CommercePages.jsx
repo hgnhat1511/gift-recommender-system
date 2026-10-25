@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import api, { getApiError, getAuth } from '../../lib/api.js';
-import { beginGuestCartMerge, clearGuestCartMergePending, completeGuestCartMerge, getGuestCart, getPendingGuestCartMerge, removeGuestCartItem, updateGuestCartItem } from '../../lib/guestCart.js';
+import { beginGuestCartMerge, clearGuestCart, clearGuestCartMergePending, completeGuestCartMerge, getGuestCart, getPendingGuestCartMerge, removeGuestCartItem, setGuestCartAllSelected, updateGuestCartItem } from '../../lib/guestCart.js';
 import { emitCartChange } from '../../context/CartContext.jsx';
 import { getOrderStatusLabel, getPaymentStatusLabel, getPaymentMethodLabel, getReturnStatusLabel, getShippingMethodLabel } from '../../lib/labels.js';
 import { money } from '../../data/catalogOptions.js';
@@ -21,6 +21,7 @@ export function CartPage(){
   const [notice,setNotice]=useState(location.state?.message||'');
   const [mergeBusy,setMergeBusy]=useState(false);
   const [mergePending,setMergePending]=useState(Boolean(getPendingGuestCartMerge()));
+  const reorderResult=location.state?.reorderResult;
   const guestIds=guestItems.map(item=>item.productId);
   const guestKey=guestIds.join(',');
   const guestRows=guestItems.map(item=>{const product=guestProducts[item.productId]||null;return {cartItemId:item.productId,quantity:item.quantity,selected:item.selected,product,available:Boolean(product&&product.stock>=item.quantity),isGuest:true}});
@@ -29,11 +30,11 @@ export function CartPage(){
   const selectedUnavailable=selectedItems.some(item=>!item.available);
   const subtotal=authenticated?Number(cart?.subtotal||0):selectedItems.reduce((total,item)=>total+(item.product?.price||0)*item.quantity,0);
 
-  async function load(){setLoading(true);try{const {data}=await api.get('/cart');setCart(data.data)}catch(e){setError(getApiError(e,'Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c gi\u1ecf h\u00e0ng.'))}finally{setLoading(false)}}
+  async function load(){setLoading(true);try{const {data}=await api.get('/cart');setCart(data.data)}catch(e){setError(getApiError(e,'Không tải được giỏ hàng.'))}finally{setLoading(false)}}
   useEffect(()=>{
     if(!authenticated)return;
     let active=true;
-    api.get('/cart').then(({data})=>{if(active)setCart(data.data)}).catch(e=>{if(active)setError(getApiError(e,'Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c gi\u1ecf h\u00e0ng.'))}).finally(()=>{if(active)setLoading(false)});
+    api.get('/cart').then(({data})=>{if(active)setCart(data.data)}).catch(e=>{if(active)setError(getApiError(e,'Không tải được giỏ hàng.'))}).finally(()=>{if(active)setLoading(false)});
     return()=>{active=false};
   },[authenticated]);
   useEffect(()=>{
@@ -46,19 +47,37 @@ export function CartPage(){
 
   function syncGuest(){setGuestItems(getGuestCart());setMergePending(Boolean(getPendingGuestCartMerge()))}
   async function update(item,quantity){
+    const qty=Math.max(1,Math.min(item.product?.stock||99,Math.min(99,quantity)));
     setError('');
-    if(item.isGuest){updateGuestCartItem(item.cartItemId,{quantity});syncGuest();return}
-    try{await api.patch('/cart/items/'+item.cartItemId,{quantity});emitCartChange();await load()}catch(e){setError(getApiError(e,'Kh\u00f4ng c\u1eadp nh\u1eadt \u0111\u01b0\u1ee3c s\u1ed1 l\u01b0\u1ee3ng.'));await load()}
+    if(item.isGuest){updateGuestCartItem(item.cartItemId,{quantity:qty});syncGuest();return}
+    try{await api.patch('/cart/items/'+item.cartItemId,{quantity:qty});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không cập nhật được số lượng.'));await load()}
   }
   async function selectItem(item,isSelected){
     setError('');
     if(item.isGuest){updateGuestCartItem(item.cartItemId,{selected:isSelected});syncGuest();return}
-    try{await api.patch('/cart/items/'+item.cartItemId+'/selection',{isSelected});emitCartChange();await load()}catch(e){setError(getApiError(e,'Kh\u00f4ng th\u1ec3 thay \u0111\u1ed5i l\u1ef1a ch\u1ecdn.'))}
+    try{await api.patch('/cart/items/'+item.cartItemId+'/selection',{isSelected});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể thay đổi lựa chọn.'))}
+  }
+  async function selectAll(isSelected){
+    setError('');
+    if(authenticated){
+      try{await api.patch('/cart/selection',{isSelected});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể cập nhật lựa chọn giỏ hàng.'))}
+    }else{
+      setGuestCartAllSelected(isSelected);syncGuest();emitCartChange();
+    }
   }
   async function remove(item){
     setError('');
     if(item.isGuest){removeGuestCartItem(item.cartItemId);syncGuest();return}
-    try{await api.delete('/cart/items/'+item.cartItemId);emitCartChange();await load()}catch(e){setError(getApiError(e,'Kh\u00f4ng x\u00f3a \u0111\u01b0\u1ee3c s\u1ea3n ph\u1ea9m.'))}
+    try{await api.delete('/cart/items/'+item.cartItemId);emitCartChange();await load()}catch(e){setError(getApiError(e,'Không xóa được sản phẩm.'))}
+  }
+  async function clearAll(){
+    if(!window.confirm('Bạn có chắc muốn xóa toàn bộ sản phẩm trong giỏ hàng?'))return;
+    setError('');
+    if(authenticated){
+      try{await api.delete('/cart');emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể xóa giỏ hàng.'))}
+    }else{
+      clearGuestCart();syncGuest();emitCartChange();
+    }
   }
   async function mergeGuestCart(){
     const pending=beginGuestCartMerge();
@@ -67,32 +86,48 @@ export function CartPage(){
     try{
       await api.post('/cart/merge',pending);
       completeGuestCartMerge(pending.key);syncGuest();emitCartChange();
-      setNotice('Gi\u1ecf h\u00e0ng kh\u00e1ch \u0111\u00e3 \u0111\u01b0\u1ee3c g\u1ed9p v\u00e0o t\u00e0i kho\u1ea3n.');
+      setNotice('Giỏ hàng khách đã được gộp vào tài khoản.');
       await load();
     }catch(e){
       if(e.response?.status&&e.response.status<500)clearGuestCartMergePending();
-      syncGuest();setError(getApiError(e,'Kh\u00f4ng x\u00e1c nh\u1eadn \u0111\u01b0\u1ee3c k\u1ebft qu\u1ea3 g\u1ed9p. H\u00e3y th\u1eed l\u1ea1i.'));
+      syncGuest();setError(getApiError(e,'Không xác nhận được kết quả gộp. Hãy thử lại.'));
     }finally{setMergeBusy(false)}
   }
   function renderItem(item){
     const product=item.product;
     return <article className={'commerce-cart-row '+(item.selected?'is-selected':'')} key={(item.isGuest?'guest-':'')+item.cartItemId}>
-      <label className="commerce-cart-select"><input type="checkbox" checked={item.selected} disabled={item.isGuest&&mergePending} aria-label={'Ch\u1ecdn '+(product?.name||'s\u1ea3n ph\u1ea9m')+' \u0111\u1ec3 thanh to\u00e1n'} onChange={event=>selectItem(item,event.target.checked)}/></label>
-      <Link to={product?'/products/'+product.id:'/products'} className="commerce-cart-image"><img src={product?.imageUrl||'/icons.svg'} alt={product?.name||'S\u1ea3n ph\u1ea9m kh\u00f4ng kh\u1ea3 d\u1ee5ng'}/></Link>
-      <div className="commerce-cart-info"><Link to={product?'/products/'+product.id:'/products'}><b>{product?.name||'S\u1ea3n ph\u1ea9m kh\u00f4ng c\u00f2n kh\u1ea3 d\u1ee5ng'}</b></Link><span>{product?money(product.price):'Kh\u00f4ng c\u00f2n h\u00e0ng'}</span>{product&&<small>{item.available?'C\u00f2n '+product.stock:'T\u1ed3n kho thay \u0111\u1ed5i; h\u00e3y ch\u1ec9nh s\u1ed1 l\u01b0\u1ee3ng'}</small>}{item.isGuest&&<small>Gi&#225; v&#224; t&#7891;n kho s&#7869; &#273;&#432;&#7907;c ki&#7875;m tra l&#7841;i khi g&#7897;p gi&#7887;.</small>}{!item.selected&&<small>S&#7869; &#273;&#432;&#7907;c gi&#7919; trong gi&#7887; sau khi &#273;&#7863;t h&#224;ng.</small>}</div>
-      <div className="commerce-quantity"><button aria-label="Gi&#7843;m s&#7889; l&#432;&#7907;ng" disabled={item.quantity<=1||item.isGuest&&mergePending} onClick={()=>update(item,item.quantity-1)}><Minus size={15}/></button><span>{item.quantity}</span><button aria-label="T&#259;ng s&#7889; l&#432;&#7907;ng" disabled={!product||item.quantity>=product.stock||item.quantity>=99||item.isGuest&&mergePending} onClick={()=>update(item,item.quantity+1)}><Plus size={15}/></button></div>
+      <label className="commerce-cart-select"><input type="checkbox" checked={item.selected} disabled={item.isGuest&&mergePending} aria-label={'Chọn '+(product?.name||'sản phẩm')+' để thanh toán'} onChange={event=>selectItem(item,event.target.checked)}/></label>
+      <Link to={product?'/products/'+product.id:'/products'} className="commerce-cart-image"><img src={product?.imageUrl||'/icons.svg'} alt={product?.name||'Sản phẩm không khả dụng'}/></Link>
+      <div className="commerce-cart-info"><Link to={product?'/products/'+product.id:'/products'}><b>{product?.name||'Sản phẩm không còn khả dụng'}</b></Link><span>{product?money(product.price):'Không còn hàng'}</span>{product&&<small>{item.available?'Còn '+product.stock:'Tồn kho thay đổi; hãy chỉnh số lượng'}</small>}{item.isGuest&&<small>Giá và tồn kho sẽ được kiểm tra lại khi gộp giỏ.</small>}{!item.selected&&<small>Sẽ được giữ trong giỏ sau khi đặt hàng.</small>}</div>
+      <div className="commerce-quantity">
+        <button aria-label="Giảm số lượng" disabled={item.quantity<=1||(item.isGuest&&mergePending)} onClick={()=>update(item,item.quantity-1)}><Minus size={15}/></button>
+        <input type="number" min="1" max={Math.min(99,product?.stock||99)} value={item.quantity} disabled={item.isGuest&&mergePending} onChange={e=>{const val=parseInt(e.target.value,10);if(!isNaN(val))update(item,val)}} aria-label="Số lượng sản phẩm"/>
+        <button aria-label="Tăng số lượng" disabled={!product||item.quantity>=product.stock||item.quantity>=99||(item.isGuest&&mergePending)} onClick={()=>update(item,item.quantity+1)}><Plus size={15}/></button>
+      </div>
       <b className="commerce-line-total">{money((product?.price||0)*item.quantity)}</b>
-      <button className="commerce-trash" aria-label="X&#243;a s&#7843;n ph&#7849;m" disabled={item.isGuest&&mergePending} onClick={()=>remove(item)}><Trash2 size={17}/></button>
+      <button className="commerce-trash" aria-label="Xóa sản phẩm" disabled={item.isGuest&&mergePending} onClick={()=>remove(item)}><Trash2 size={17}/></button>
     </article>;
   }
 
   return <main className="commerce-page">
-    <div className="commerce-breadcrumb"><Link to="/">Trang ch&#7911;</Link><span>/</span><b>Gi&#7887; h&#224;ng</b></div>
-    <PageHeading title="Gi&#7887; h&#224;ng" subtitle={(authenticated?(cart?.itemCount||0):guestRows.reduce((n,item)=>n+item.quantity,0))+' s&#7843;n ph&#7849;m'}/>
-    {notice&&<p className="commerce-alert commerce-alert-success">{notice}</p>}{error&&<p className="commerce-alert">{error}</p>}
-    {loading?<div className="commerce-loading">&#272;ang t&#7843;i gi&#7887; h&#224;ng...</div>:!visibleItems.length&&!(authenticated&&guestItems.length)?<div className="commerce-empty"><ShoppingBag size={40}/><h2>Gi&#7887; h&#224;ng &#273;ang tr&#7889;ng</h2><p>Kh&#225;m ph&#225; c&#225;c m&#243;n qu&#224; trong c&#7917;a h&#224;ng Giftly.</p><Link className="commerce-button" to="/products">Ti&#7871;p t&#7909;c mua s&#7855;m</Link></div>:<div className="commerce-cart-layout">
+    <div className="commerce-breadcrumb"><Link to="/">Trang chủ</Link><span>/</span><b>Giỏ hàng</b></div>
+    <PageHeading title="Giỏ hàng" subtitle={(authenticated?(cart?.itemCount||0):guestRows.reduce((n,item)=>n+item.quantity,0))+' sản phẩm'}/>
+    {notice&&<p className="commerce-alert commerce-alert-success">{notice}</p>}
+    {reorderResult?.skippedItems?.length>0&&<div className="commerce-alert commerce-alert-warning">
+      <p><b>Lưu ý khi mua lại:</b> Có {reorderResult.skippedItems.length} sản phẩm không thể thêm vào giỏ:</p>
+      <ul>{reorderResult.skippedItems.map((s,i)=><li key={i}><b>{s.name}</b>: {s.reason}</li>)}</ul>
+    </div>}
+    {error&&<p className="commerce-alert">{error}</p>}
+    {loading?<div className="commerce-loading">Đang tải giỏ hàng...</div>:!visibleItems.length&&!(authenticated&&guestItems.length)?<div className="commerce-empty"><ShoppingBag size={40}/><h2>Giỏ hàng đang trống</h2><p>Khám phá các món quà trong cửa hàng Giftly.</p><Link className="commerce-button" to="/products">Tiếp tục mua sắm</Link></div>:<div className="commerce-cart-layout">
       <section className="commerce-cart-list">
-        {authenticated&&guestItems.length>0&&<div className="commerce-panel"><h2>S&#7843;n ph&#7849;m t&#7915; gi&#7887; kh&#225;ch</h2><p>C&#225;c m&#243;n n&#224;y v&#7851;n &#273;&#432;&#7907;c l&#432;u tr&#234;n tr&#236;nh duy&#7879;t cho &#273;&#7871;n khi g&#7897;p th&#224;nh c&#244;ng.</p>{guestRows.map(renderItem)}<button className="commerce-button" disabled={mergeBusy} onClick={mergeGuestCart}>{mergeBusy?'&#272;ang g&#7897;p...':mergePending?'Th&#7917; g&#7897;p l&#7841;i':'G&#7897;p v&#224;o gi&#7887; t&#224;i kho&#7843;n'}</button></div>}
+        {visibleItems.length>0&&<div className="commerce-cart-toolbar">
+          <label className="commerce-cart-select-all">
+            <input type="checkbox" checked={visibleItems.length>0&&visibleItems.every(i=>i.selected)} onChange={e=>selectAll(e.target.checked)}/>
+            <span>Chọn tất cả ({visibleItems.length} sản phẩm)</span>
+          </label>
+          <button type="button" className="commerce-danger-text" onClick={clearAll}>Xóa tất cả</button>
+        </div>}
+        {authenticated&&guestItems.length>0&&<div className="commerce-panel"><h2>Sản phẩm từ giỏ khách</h2><p>Các món này vẫn được lưu trên trình duyệt cho đến khi gộp thành công.</p>{guestRows.map(renderItem)}<button className="commerce-button" disabled={mergeBusy} onClick={mergeGuestCart}>{mergeBusy?'Đang gộp...':mergePending?'Thử gộp lại':'Gộp vào giỏ tài khoản'}</button></div>}
         {visibleItems.map(renderItem)}
       </section>
       <aside className="commerce-order-summary"><h2>T&#243;m t&#7855;t &#273;&#417;n h&#224;ng</h2><div><span>&#272;&#227; ch&#7885;n</span><b>{selectedItems.reduce((count,item)=>count+item.quantity,0)} s&#7843;n ph&#7849;m</b></div><div><span>T&#7841;m t&#237;nh s&#7843;n ph&#7849;m &#273;&#227; ch&#7885;n</span><b>{money(subtotal)}</b></div><div><span>Ph&#237; giao h&#224;ng</span><span>T&#237;nh &#7903; b&#432;&#7899;c thanh to&#225;n</span></div><div className="commerce-summary-total"><span>T&#7893;ng t&#7841;m t&#237;nh</span><b>{money(subtotal)}</b></div><p>Gi&#225; v&#224; t&#7891;n kho &#273;&#432;&#7907;c x&#225;c nh&#7853;n l&#7841;i khi g&#7897;p gi&#7887; v&#224; &#273;&#7863;t h&#224;ng. S&#7843;n ph&#7849;m ch&#432;a ch&#7885;n v&#7851;n &#7903; trong gi&#7887;.</p>
@@ -133,16 +168,33 @@ export function OrdersPage(){
 }
 
 export function OrderDetailPage(){
-  const {id}=useParams();const [params]=useSearchParams();const paymentReturn=params.get('paymentReturn');const [order,setOrder]=useState(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [notice,setNotice]=useState(params.get('placed')?'Đơn hàng đã được tạo thành công.':'');const [returnReason,setReturnReason]=useState('');const [returnDetails,setReturnDetails]=useState('');const [returnRequests,setReturnRequests]=useState([]);const [reordered,setReordered]=useState(false);
+  const {id}=useParams();const [params]=useSearchParams();const paymentReturn=params.get('paymentReturn');const [order,setOrder]=useState(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [notice,setNotice]=useState(params.get('placed')?'Đơn hàng đã được tạo thành công.':'');const [returnReason,setReturnReason]=useState('');const [returnDetails,setReturnDetails]=useState('');const [returnRequests,setReturnRequests]=useState([]);
+  const navigate=useNavigate();
   async function load(){try{const {data}=await api.get(`/orders/${id}`);setOrder(data.data)}catch(e){setError(getApiError(e,'Không tải được đơn hàng.'))}}
   useEffect(()=>{let active=true;async function loadDetail(){try{const {data}=await api.get(`/orders/${id}`);if(!active)return;setOrder(data.data);setError('');const {data:returns}=await api.get(`/orders/${id}/returns`);if(active)setReturnRequests(returns.data)}catch(e){if(active)setError(getApiError(e,'Không tải được đơn hàng.'))}}loadDetail();return()=>{active=false}},[id]);
   useEffect(()=>{if(paymentReturn!=='awaiting-confirmation')return;let tries=0;const timer=setInterval(async()=>{tries++;try{const {data}=await api.get(`/orders/${id}`);setOrder(data.data);if(data.data.paymentStatus==='PAID'||tries>=10)clearInterval(timer)}catch{if(tries>=10)clearInterval(timer)}},1500);return()=>clearInterval(timer)},[id,paymentReturn]);
   async function payOnline(){setBusy(true);setError('');try{const {data}=await api.post(`/payments/orders/${id}/vnpay`);window.location.assign(data.data.paymentUrl)}catch(e){setError(getApiError(e,'Không thể khởi tạo thanh toán.'))}finally{setBusy(false)}}
   async function cancel(){if(!window.confirm('Bạn muốn hủy đơn hàng này?'))return;setBusy(true);try{await api.post(`/orders/${id}/cancel`);setNotice('Đơn hàng đã được hủy.');await load()}catch(e){setError(getApiError(e,'Không thể hủy đơn.'))}finally{setBusy(false)}}
   async function requestReturn(e){e.preventDefault();setBusy(true);try{await api.post(`/orders/${id}/returns`,{reason:returnReason,details:returnDetails});const {data}=await api.get(`/orders/${id}/returns`);setReturnRequests(data.data);setNotice('Yêu cầu đổi trả đã được gửi để cửa hàng xem xét.');setReturnReason('');setReturnDetails('')}catch(e){setError(getApiError(e,'Không gửi được yêu cầu.'))}finally{setBusy(false)}}
-async function reorder(){setBusy(true);setError('');try{await api.post(`/orders/${id}/reorder`);setReordered(true);setNotice('Sản phẩm trong đơn đã được thêm vào giỏ. Hãy kiểm tra giá và tồn kho trước khi đặt lại.')}catch(e){setError(getApiError(e,'Không thể mua lại đơn hàng. Kiểm tra tình trạng sản phẩm và giỏ hàng.'))}finally{setBusy(false)}}
+  async function reorder(){
+    setBusy(true);setError('');
+    try{
+      const {data}=await api.post(`/orders/${id}/reorder`);
+      emitCartChange();
+      navigate('/cart',{
+        state:{
+          message:data.message||'Sản phẩm từ đơn hàng đã được thêm vào giỏ hàng.',
+          reorderResult:data.data
+        }
+      });
+    }catch(e){
+      setError(getApiError(e,'Không thể mua lại đơn hàng. Kiểm tra tình trạng sản phẩm và giỏ hàng.'));
+    }finally{
+      setBusy(false);
+    }
+  }
   if(!order)return <main className="commerce-page">{error?<div className="commerce-empty"><h1>Không tìm thấy đơn</h1><p>{error}</p></div>:<div className="commerce-loading">Đang tải đơn hàng…</div>}</main>;
-  return <main className="commerce-page"><div className="commerce-breadcrumb"><Link to="/orders">Đơn hàng</Link><span>/</span><b>{order.orderCode}</b></div>{paymentReturn==='awaiting-confirmation'&&<p className={order.paymentStatus==='PAID'?'commerce-alert commerce-alert-success':'commerce-alert'}>{order.paymentStatus==='PAID'?'VNPAY đã xác nhận thanh toán.':'Đã quay về từ VNPAY; Giftly đang chờ xác nhận server-to-server. Trạng thái đơn chỉ đổi sau khi callback được xác minh.'}</p>}{paymentReturn==='not-completed'&&<p className="commerce-alert">VNPAY chưa xác nhận giao dịch này. Bạn có thể thử thanh toán lại.</p>}{notice&&<p className="commerce-alert commerce-alert-success">{notice}{reordered&&<> <Link to="/cart">Mở giỏ hàng</Link></>}</p>}{error&&<p className="commerce-alert">{error}</p>}<div className="commerce-page-heading"><div><span className="commerce-kicker">ĐƠN HÀNG</span><h1>{order.orderCode}</h1><p>Đặt lúc {new Date(order.createdAt).toLocaleString('vi-VN')}</p></div><span className={`commerce-status status-${order.status.toLowerCase()}`}>{getOrderStatusLabel(order)}</span></div>
+  return <main className="commerce-page"><div className="commerce-breadcrumb"><Link to="/orders">Đơn hàng</Link><span>/</span><b>{order.orderCode}</b></div>{paymentReturn==='awaiting-confirmation'&&<p className={order.paymentStatus==='PAID'?'commerce-alert commerce-alert-success':'commerce-alert'}>{order.paymentStatus==='PAID'?'VNPAY đã xác nhận thanh toán.':'Đã quay về từ VNPAY; Giftly đang chờ xác nhận server-to-server. Trạng thái đơn chỉ đổi sau khi callback được xác minh.'}</p>}{paymentReturn==='not-completed'&&<p className="commerce-alert">VNPAY chưa xác nhận giao dịch này. Bạn có thể thử thanh toán lại.</p>}{notice&&<p className="commerce-alert commerce-alert-success">{notice}</p>}{error&&<p className="commerce-alert">{error}</p>}<div className="commerce-page-heading"><div><span className="commerce-kicker">ĐƠN HÀNG</span><h1>{order.orderCode}</h1><p>Đặt lúc {new Date(order.createdAt).toLocaleString('vi-VN')}</p></div><span className={`commerce-status status-${order.status.toLowerCase()}`}>{getOrderStatusLabel(order)}</span></div>
     <div className="order-print-action"><button type="button" className="commerce-button commerce-button-light" onClick={() => window.print()}>In / lưu bản tóm tắt</button></div>
 <section className="commerce-print-receipt" aria-label="Bản tóm tắt đơn hàng">
   <header className="order-print-brand"><strong>GIFTLY</strong><span>BẢN TÓM TẮT ĐƠN HÀNG</span></header>

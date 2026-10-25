@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/lib/labels.test.js",
+    "test": "node --test src/lib/labels.test.js src/context/CartBadge.test.js",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

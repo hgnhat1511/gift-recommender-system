@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const pool = require('../config/db');
 const vnpay = require('../services/payments/vnpay');
+const { calculateReorderItems } = require('../utils/cartHelper');
 
 const cents = (value) => Math.round(Number(value) * 100);
 const amount = (value) => Number((value / 100).toFixed(2));
@@ -168,36 +169,51 @@ async function create(req, res, next) {
 const orderSelect = `SELECT o.*, (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) item_count FROM orders o`;
 
 async function reorderMine(req,res,next){
-    if(!/^\d+$/.test(String(req.params.id||'')))return res.status(400).json({success:false,message:'Invalid order id.'});
+    if(!/^\d+$/.test(String(req.params.id||'')))return res.status(400).json({success:false,message:'Mã đơn hàng không hợp lệ.'});
     const connection=await pool.getConnection();
     try{
         await connection.beginTransaction();
         const [orders]=await connection.execute('SELECT id FROM orders WHERE id=? AND user_id=? FOR UPDATE',[req.params.id,req.user.id]);
-        if(!orders[0]){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
+        if(!orders[0]){await connection.rollback();return res.status(404).json({success:false,message:'Không tìm thấy đơn hàng.'})}
         const [orderItems]=await connection.execute('SELECT product_id,product_name,quantity FROM order_items WHERE order_id=? ORDER BY id',[orders[0].id]);
-        if(!orderItems.length){await connection.rollback();return res.status(409).json({success:false,message:'This order has no products available to reorder.'})}
-        const requested=new Map();
-        for(const item of orderItems){
-            if(item.product_id==null){await connection.rollback();return res.status(409).json({success:false,message:`${item.product_name} is no longer available.`})}
-            const id=String(item.product_id),current=requested.get(id)||{quantity:0,name:item.product_name};current.quantity+=Number(item.quantity);requested.set(id,current);
+        if(!orderItems.length){await connection.rollback();return res.status(409).json({success:false,message:'Đơn hàng này không có sản phẩm để mua lại.'})}
+        const validIds=[...new Set(orderItems.filter(item=>item.product_id!=null).map(item=>String(item.product_id)))];
+        let products=[];
+        let cartRows=[];
+        if(validIds.length>0){
+            const [pRows]=await connection.execute(`SELECT id,name,stock,status,price FROM products WHERE id IN (${validIds.map(()=>'?').join(',')}) ORDER BY id FOR UPDATE`,validIds);
+            products=pRows;
+            const [cRows]=await connection.execute(`SELECT product_id,quantity FROM cart_items WHERE user_id=? AND product_id IN (${validIds.map(()=>'?').join(',')}) FOR UPDATE`,[req.user.id,...validIds]);
+            cartRows=cRows;
         }
-        const productIds=[...requested.keys()];
-        const [products]=await connection.execute(`SELECT id,name,stock,status FROM products WHERE id IN (${productIds.map(()=>'?').join(',')}) ORDER BY id FOR UPDATE`,productIds);
-        const byId=new Map(products.map(product=>[String(product.id),product]));
-        const [cartRows]=await connection.execute(`SELECT product_id,quantity FROM cart_items WHERE user_id=? AND product_id IN (${productIds.map(()=>'?').join(',')}) FOR UPDATE`,[req.user.id,...productIds]);
-        const inCart=new Map(cartRows.map(item=>[String(item.product_id),Number(item.quantity)]));
-        for(const [id,item] of requested){
-            const product=byId.get(id),target=item.quantity+(inCart.get(id)||0);
-            if(!product||product.status!=='ACTIVE'){await connection.rollback();return res.status(409).json({success:false,message:`${item.name} is no longer available.`})}
-            if(target>Number(product.stock)||target>99){await connection.rollback();return res.status(409).json({success:false,message:`Not enough current stock to add ${item.name} to your existing cart.`,data:{productId:id,available:Number(product.stock),alreadyInCart:inCart.get(id)||0,requested:item.quantity}})}
+        const { addedItems, skippedItems } = calculateReorderItems({ orderItems, products, cartItems: cartRows });
+        if(addedItems.length===0){
+            await connection.rollback();
+            return res.status(409).json({
+                success:false,
+                message:'Không thể thêm sản phẩm nào vào giỏ hàng do đã hết hàng hoặc ngừng kinh doanh.',
+                data:{ addedItems:[], skippedItems }
+            });
         }
-        for(const [id,item] of requested){
-            const target=item.quantity+(inCart.get(id)||0);
-            await connection.execute('INSERT INTO cart_items (user_id,product_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),is_selected=TRUE',[req.user.id,id,target]);
-            await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'CART_ADD')",[req.user.id,id]);
+        for(const item of addedItems){
+            await connection.execute('INSERT INTO cart_items (user_id,product_id,quantity,is_selected) VALUES (?,?,?,TRUE) ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),is_selected=TRUE',[req.user.id,item.productId,item.targetInCart]);
+            await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'CART_ADD')",[req.user.id,item.productId]);
         }
         await connection.commit();
-        return res.json({success:true,message:'Available products from the order were added to your cart.',data:{productCount:requested.size}});
+        let message=`Đã thêm ${addedItems.length} sản phẩm từ đơn hàng vào giỏ hàng.`;
+        if(skippedItems.length>0){
+            message+=` (Có ${skippedItems.length} sản phẩm không thể thêm do hết hàng hoặc ngừng kinh doanh).`;
+        }
+        return res.json({
+            success:true,
+            message,
+            data:{
+                addedItems,
+                skippedItems,
+                addedCount:addedItems.length,
+                skippedCount:skippedItems.length
+            }
+        });
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
 async function listMine(req, res, next) {

@@ -1,10 +1,8 @@
 const pool = require('../config/db');
 const { present } = require('./catalogController');
+const { validateQuantity } = require('../utils/cartHelper');
 
-function quantity(value) {
-    const number = Number(value);
-    return Number.isInteger(number) && number >= 1 && number <= 99 ? number : null;
-}
+const quantity = validateQuantity;
 
 async function list(req, res, next) {
     try {
@@ -160,6 +158,15 @@ async function updateSelection(req,res,next){
         return res.json({success:true,data:{isSelected:req.body.isSelected}});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
+
+async function updateAllSelection(req,res,next){
+    if(typeof req.body?.isSelected!=='boolean')return res.status(400).json({success:false,message:'isSelected must be a boolean.'});
+    try{
+        await pool.execute('UPDATE cart_items SET is_selected=? WHERE user_id=?',[req.body.isSelected,req.user.id]);
+        return res.json({success:true,data:{isSelected:req.body.isSelected}});
+    }catch(error){return next(error)}
+}
+
 async function remove(req, res, next) {
     try {
         const [result] = await pool.execute('DELETE FROM cart_items WHERE id=? AND user_id=?', [req.params.itemId,req.user.id]);
@@ -173,4 +180,4 @@ async function clear(req, res, next) {
     catch (error) { return next(error); }
 }
 
-module.exports = { list, add, merge, update, updateSelection, remove, clear };
+module.exports = { list, add, merge, update, updateSelection, updateAllSelection, remove, clear, quantity };
