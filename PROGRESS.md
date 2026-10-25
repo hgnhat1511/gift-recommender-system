@@ -5,7 +5,9 @@
 Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kho trên nhánh `feature/giftly-hoan-thien`).
 - Đã tạo `CartContext` dùng chung (`core-frontend/src/context/CartContext.jsx`), khắc phục lỗi badge số lượng giỏ hàng trên header bị mất/hiển thị 0 trên StoreLayout. Quy ước tính `itemCount = sum(quantity)` đồng bộ cả khách vãng lai và người dùng đã đăng nhập.
 - Đã bổ sung chi tiết tồn kho khi thêm/sửa giỏ hàng và đặt đơn: phản hồi lỗi khi không đủ tồn kho nêu rõ tên sản phẩm, số lượng còn lại trong kho và số lượng khách yêu cầu.
-- Giữ nguyên mô hình trừ kho nguyên tử (`stock = stock - ? WHERE stock >= ?`), hoàn kho khi hủy đơn hoặc hết hạn thanh toán; không thêm cột giữ hàng.
+- Giữ nguyên mô hình trừ kho nguyên tử (`stock = stock - ? WHERE stock >= ?`), hoàn kho khi khách hủy đơn (đính chính: worker hết hạn thanh toán chưa được triển khai tại giai đoạn này, hiện tại chỉ hoàn kho khi hủy đơn); không thêm cột giữ hàng.
+- Triển khai Khu vực 0: Tạo file nhãn tập trung `core-frontend/src/lib/labels.js`, chuẩn hóa và Việt hóa 100% nhãn trạng thái (đơn hàng, ngoại lệ VNPAY UNPAID PENDING -> "Chờ thanh toán", thanh toán, đổi/trả, vận chuyển, khách hàng, vai trò, sản phẩm, yêu cầu xóa tài khoản) tại `/orders`, `/orders/:id`, `/account`, và toàn bộ admin portal (dashboard KPI, orders toolbar/bảng/chi tiết, customers, returns, deletion requests).
+- Viết unit test `core-frontend/src/lib/labels.test.js` import code thật (8/8 tests PASS).
 - Bổ sung bộ kiểm thử an toàn `core-backend/test/cart-inventory.test.js` (unit test toán tử và format lỗi; test DB integration tự động skip khi không có `TEST_DB_NAME`). Toàn bộ 13 unit test backend PASS (1 skipped an toàn).
 - Frontend lint (`npm run lint` đạt 0 lỗi) và build production (`npm run build` thành công).
 
