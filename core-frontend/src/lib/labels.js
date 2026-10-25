@@ -88,6 +88,34 @@ export const DELETION_STATUS = Object.freeze({
   REJECTED: 'Bị từ chối',
 });
 
+export const COUPON_DISCOUNT_TYPE = Object.freeze({
+  PERCENT: 'Phần trăm (%)',
+  FIXED: 'Số tiền cố định (₫)',
+});
+
+export const PAYMENT_ATTEMPT_STATUS = Object.freeze({
+  PENDING: 'Chờ thanh toán',
+  SUCCEEDED: 'Thành công',
+  FAILED: 'Thất bại',
+  EXPIRED: 'Hết hạn',
+  REVIEW: 'Cần đối soát',
+});
+
+export const NOTIFICATION_TYPE = Object.freeze({
+  ORDER: 'Đơn hàng',
+  SHIPPING: 'Vận chuyển',
+  ACCOUNT: 'Tài khoản',
+  RETURN: 'Đổi trả',
+  PAYMENT: 'Thanh toán',
+});
+
+export const INVENTORY_REASON = Object.freeze({
+  'Customer order': 'Đơn hàng của khách',
+  'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
+  'Customer return; stock restored': 'Đổi trả; nhập lại kho',
+  'Admin stock adjustment': 'Quản trị viên điều chỉnh',
+});
+
 /**
  * Lấy nhãn hiển thị cho trạng thái đơn hàng.
  * Ngoại lệ nghiệp vụ: Đơn PENDING + thanh toán online (VNPAY) + UNPAID = "Chờ thanh toán".
@@ -151,3 +179,20 @@ export function getProductStatusLabel(status) {
 export function getDeletionStatusLabel(status) {
   return lookup(DELETION_STATUS, status, 'deletion_status');
 }
+
+export function getCouponDiscountTypeLabel(type) {
+  return lookup(COUPON_DISCOUNT_TYPE, type, 'coupon_discount_type');
+}
+
+export function getPaymentAttemptStatusLabel(status) {
+  return lookup(PAYMENT_ATTEMPT_STATUS, status, 'payment_attempt_status');
+}
+
+export function getNotificationTypeLabel(type) {
+  return lookup(NOTIFICATION_TYPE, type, 'notification_type');
+}
+
+export function getInventoryReasonLabel(reason) {
+  return lookup(INVENTORY_REASON, reason, 'inventory_reason');
+}
+

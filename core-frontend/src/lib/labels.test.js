@@ -11,6 +11,10 @@ import {
   USER_ROLE,
   PRODUCT_STATUS,
   DELETION_STATUS,
+  COUPON_DISCOUNT_TYPE,
+  PAYMENT_ATTEMPT_STATUS,
+  NOTIFICATION_TYPE,
+  INVENTORY_REASON,
   getOrderStatusLabel,
   getPaymentStatusLabel,
   getPaymentMethodLabel,
@@ -21,6 +25,10 @@ import {
   getUserRoleLabel,
   getProductStatusLabel,
   getDeletionStatusLabel,
+  getCouponDiscountTypeLabel,
+  getPaymentAttemptStatusLabel,
+  getNotificationTypeLabel,
+  getInventoryReasonLabel,
 } from './labels.js';
 
 test('ORDER_STATUS contains all required real enum keys with proper Vietnamese labels', () => {
@@ -120,9 +128,29 @@ test('Other administrative labels (customer, role, product, deletion)', () => {
   assert.equal(getDeletionStatusLabel('REJECTED'), 'Bị từ chối');
 });
 
+test('Additional domain labels (coupon discount type, payment attempts, notifications, inventory reasons)', () => {
+  assert.equal(COUPON_DISCOUNT_TYPE.PERCENT, 'Phần trăm (%)');
+  assert.equal(COUPON_DISCOUNT_TYPE.FIXED, 'Số tiền cố định (₫)');
+  assert.equal(getCouponDiscountTypeLabel('PERCENT'), 'Phần trăm (%)');
+  assert.equal(getCouponDiscountTypeLabel('FIXED'), 'Số tiền cố định (₫)');
+
+  assert.equal(PAYMENT_ATTEMPT_STATUS.SUCCEEDED, 'Thành công');
+  assert.equal(getPaymentAttemptStatusLabel('SUCCEEDED'), 'Thành công');
+  assert.equal(getPaymentAttemptStatusLabel('EXPIRED'), 'Hết hạn');
+
+  assert.equal(NOTIFICATION_TYPE.ORDER, 'Đơn hàng');
+  assert.equal(getNotificationTypeLabel('ORDER'), 'Đơn hàng');
+  assert.equal(getNotificationTypeLabel('SHIPPING'), 'Vận chuyển');
+
+  assert.equal(INVENTORY_REASON['Customer order'], 'Đơn hàng của khách');
+  assert.equal(getInventoryReasonLabel('Customer order'), 'Đơn hàng của khách');
+  assert.equal(getInventoryReasonLabel('Order cancelled; stock restored'), 'Hủy đơn; hoàn tồn kho');
+});
+
 test('Unknown values return raw string without crashing', () => {
   assert.equal(getOrderStatusLabel('UNKNOWN_STATUS'), 'UNKNOWN_STATUS');
   assert.equal(getPaymentStatusLabel('UNKNOWN_PAYMENT'), 'UNKNOWN_PAYMENT');
   assert.equal(getOrderStatusLabel(''), '');
   assert.equal(getOrderStatusLabel(null), '');
 });
+

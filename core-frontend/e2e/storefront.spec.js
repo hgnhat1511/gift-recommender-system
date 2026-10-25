@@ -70,7 +70,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
     await placeOrder.click();
     await expect(page).toHaveURL(/\/orders\/\d+\?placed=1/);
     await expect(page.locator('.commerce-page-heading h1')).toBeVisible();
-    await expect(page.locator('.commerce-page-heading .commerce-status')).toHaveText('PENDING');
+    await expect(page.locator('.commerce-page-heading .commerce-status')).toHaveText('Chờ xác nhận');
     await expect(page.locator('.commerce-cart-row .commerce-cart-info b').filter({ hasText: productName })).toBeVisible();
     const orderId = Number(page.url().match(/\/orders\/(\d+)/)?.[1]);
     const orderDetail = await api.get(`/api/orders/${orderId}`, { headers: { authorization: `Bearer ${token}` } });
@@ -322,18 +322,27 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
     const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(orderRow).toBeVisible();
     await orderRow.getByRole('button', { name: order.orderCode }).click();
-    await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · PENDING`) })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · Chờ xác nhận`) })).toBeVisible();
     await expect(page.locator('.admin-card').last()).toContainText(product.name);
 
     page.on('dialog', (dialog) => dialog.accept('Playwright state transition fixture'));
+    const orderStatusLabels = {
+      PENDING: 'Chờ xác nhận',
+      CONFIRMED: 'Đã xác nhận',
+      PROCESSING: 'Đang chuẩn bị hàng',
+      SHIPPED: 'Đang giao hàng',
+      DELIVERED: 'Đã giao hàng',
+      CANCELLED: 'Đã hủy',
+    };
     const transition = async (status) => {
       const responsePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
       await orderRow.getByRole('combobox').selectOption(status);
       const response = await responsePromise;
       expect(response.status()).toBe(200);
-      await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · ${status}`) })).toBeVisible();
-      await expect(orderRow.locator('td').nth(3)).toContainText(status);
+      const expectedLabel = orderStatusLabels[status] || status;
+      await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · ${expectedLabel}`) })).toBeVisible();
+      await expect(orderRow.locator('td').nth(3)).toContainText(expectedLabel);
     };
 
     await transition('CONFIRMED');
@@ -702,7 +711,7 @@ test('customer review and return flows require delivery, publish through admin r
       response.url().includes(`/api/admin/returns/${returnId}`) && response.request().method() === 'PATCH');
     await returnRow.getByRole('button', { name: 'Chấp nhận' }).click();
     expect((await approvePromise).status()).toBe(200);
-    await expect(returnRow.locator('td').nth(3)).toHaveText('APPROVED');
+    await expect(returnRow.locator('td').nth(3)).toHaveText('Đã duyệt');
 
     const completePromise = page.waitForResponse((response) =>
       response.url().includes(`/api/admin/returns/${returnId}`) && response.request().method() === 'PATCH');
@@ -710,10 +719,10 @@ test('customer review and return flows require delivery, publish through admin r
     const completeResponse = await completePromise;
     expect(completeResponse.status()).toBe(200);
     expect((await completeResponse.json()).data).toMatchObject({ restocked: true, refundProcessed: false });
-    await expect(returnRow.locator('td').nth(3)).toHaveText('COMPLETED');
+    await expect(returnRow.locator('td').nth(3)).toHaveText('Hoàn tất');
 
     await openAuthenticatedPage(page, customerSession, `/orders/${orderId}`);
-    await expect(page.locator('.commerce-return-form')).toContainText('Đã nhận hàng trả và cập nhật kho');
+    await expect(page.locator('.commerce-return-form')).toContainText('Hoàn tất');
     await expect(page.locator('.commerce-return-form')).toContainText('Giftly chưa xử lý hoàn tiền tự động');
     const finalProducts = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
     expect((await finalProducts.json()).data.items.find((item) => item.id === product.id).stock).toBe(startingStock);

@@ -183,3 +183,12 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 - Added an isolated Playwright flow that creates a one-use coupon through the admin interface, applies it in customer checkout, checks the recalculated nonzero quote, submits COD, and verifies the stored coupon code/discount/total and usage count through the API.
 - Extended test-only coupon cleanup to require the exact `E2E-` plus 32-hex fixture format, confirm no coupon usage records remain, remove its audit/category rows, and run only in a `giftly_*_test` schema.
 - Verification: all 9 Playwright scenarios passed together; backend unit tests 14 passed/1 DB-only skip. Focused coupon browser run also passed independently. After final helper edits: frontend lint/build passed and isolated API integration passed 1/1.
+
+### 2026-10-25 - Khu vực 0b: Chuẩn hóa nhãn tiếng Việt & đối chiếu Enum Database
+- Trước lần push đầu tiên phải quét bí mật (.env.example, e2e, playwright.config.js, URL chứa credential, chuỗi hex/base64 dài).
+- Đã chuẩn hóa tập trung từ điển nhãn và helper định dạng tại `core-frontend/src/lib/labels.js`, kèm unit test độc lập `core-frontend/src/lib/labels.test.js` (9/9 passed).
+- Đã thay thế toàn bộ hiển thị enum thô trên giao diện (Storefront, Account, Admin Dashboard, Admin Orders, Admin Products, Admin Inventory, Admin Returns, Admin Deletion Requests).
+- Đã cập nhật locator trong test E2E `core-frontend/e2e/storefront.spec.js` đồng bộ với nhãn tiếng Việt mới.
+- **Việc ghi nhận để làm sau:**
+  1. KPI "Đã giao hàng" trên Admin Dashboard cần được tách lại khi hệ thống bổ sung trạng thái `COMPLETED` cho đơn hàng (thực hiện ở Giai đoạn 4).
+  2. Quy tắc nhãn "Chờ thanh toán" cho đơn `PENDING` + `UNPAID` cần bổ sung phương thức `BANK_TRANSFER` khi tích hợp chuyển khoản VCB (thực hiện ở Giai đoạn 8).
