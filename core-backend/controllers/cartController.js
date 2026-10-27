@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { present } = require('./catalogController');
 const { validateQuantity } = require('../utils/cartHelper');
+const { parseMergeBody } = require('../utils/cartMergeContract');
 
 const quantity = validateQuantity;
 
@@ -46,20 +47,11 @@ async function add(req, res, next) {
 }
 
 async function merge(req, res, next) {
-    const { mergeKey, items } = req.body || {};
-    if (typeof mergeKey !== 'string' || !/^[A-Za-z0-9:_-]{8,80}$/.test(mergeKey) ||
-        !Array.isArray(items) || items.length < 1 || items.length > 50) {
-        return res.status(400).json({ success:false,message:'Invalid guest cart merge request.' });
+    const parsed = parseMergeBody(req.body);
+    if (!parsed.ok) {
+        return res.status(parsed.status).json({ success:false,message:parsed.message });
     }
-    const requested = new Map();
-    for (const item of items) {
-        const productId = String(item?.productId || '');
-        const qty = quantity(item?.quantity);
-        if (!/^\d{1,20}$/.test(productId) || !qty || typeof item?.selected !== 'boolean' || requested.has(productId)) {
-            return res.status(400).json({ success:false,message:'Guest cart contains an invalid or duplicate item.' });
-        }
-        requested.set(productId, { quantity:qty, selected:item.selected });
-    }
+    const { mergeKey, requested } = parsed;
 
     const productIds = [...requested.keys()].sort((a,b) => BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0);
     const connection = await pool.getConnection();

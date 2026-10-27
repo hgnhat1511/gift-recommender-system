@@ -85,7 +85,7 @@ export function CartPage(){
     setMergePending(true);setMergeBusy(true);setError('');
     try{
       await api.post('/cart/merge',pending);
-      completeGuestCartMerge(pending.key);syncGuest();emitCartChange();
+      completeGuestCartMerge(pending.mergeKey || pending.key);syncGuest();emitCartChange();
       setNotice('Giỏ hàng khách đã được gộp vào tài khoản.');
       await load();
     }catch(e){

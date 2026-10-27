@@ -23,7 +23,9 @@ function readState() {
     return {
       id: typeof value.id === 'string' ? value.id : createId(),
       items: [...unique.values()],
-      pendingMerge: value.pendingMerge && typeof value.pendingMerge.key === 'string' && Array.isArray(value.pendingMerge.items)
+      // Chấp nhận cả mergeKey (chuẩn mới) lẫn key (dữ liệu cũ còn sót trong localStorage)
+      pendingMerge: value.pendingMerge && Array.isArray(value.pendingMerge.items) &&
+        (typeof value.pendingMerge.mergeKey === 'string' || typeof value.pendingMerge.key === 'string')
         ? value.pendingMerge
         : null,
     };
@@ -101,7 +103,8 @@ export function beginGuestCartMerge() {
   if (state.pendingMerge) return state.pendingMerge;
   if (!state.items.length) return null;
   const pendingMerge = {
-    key: createId(),
+    // Hợp đồng chuẩn khớp với cột merge_key của DB và backend
+    mergeKey: createId(),
     items: state.items.map(({ productId, quantity, selected }) => ({ productId, quantity, selected })),
   };
   writeState({ ...state, pendingMerge });
@@ -114,9 +117,11 @@ export function clearGuestCartMergePending() {
   writeState({ ...state, pendingMerge: null });
 }
 
-export function completeGuestCartMerge(key) {
+export function completeGuestCartMerge(mergeKeyOrKey) {
   const state = readState();
-  if (state.pendingMerge?.key !== key) return false;
+  // So khớp với mergeKey mới hoặc key cũ trong localStorage
+  const storedKey = state.pendingMerge?.mergeKey || state.pendingMerge?.key;
+  if (storedKey !== mergeKeyOrKey) return false;
   writeState({ id: createId(), items: [], pendingMerge: null });
   return true;
 }

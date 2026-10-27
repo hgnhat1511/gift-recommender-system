@@ -29,7 +29,7 @@ export default function LoginPage() {
       if (pending) {
         try {
           await api.post('/cart/merge', pending);
-          completeGuestCartMerge(pending.key);
+          completeGuestCartMerge(pending.mergeKey || pending.key);
           emitCartChange();
         } catch (mergeError) {
           if (mergeError.response?.status && mergeError.response.status < 500) clearGuestCartMergePending();

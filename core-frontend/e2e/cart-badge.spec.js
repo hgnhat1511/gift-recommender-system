@@ -10,6 +10,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
       const path = url.pathname;
       const method = route.request().method();
 
+
       // 1. Banners
       if (path === '/api/banners/active') {
         return route.fulfill({
@@ -104,23 +105,59 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
         });
       }
 
-      // 4. Cart endpoints
+      // 4. Cart endpoints (nguồn contract: core-backend/controllers/cartController.js:8-45)
       if (path === '/api/cart' && method === 'GET') {
         const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-        const subtotal = cartItems.filter(i => i.selected).reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0);
+        const selectedItems = cartItems.filter(i => i.selected);
+        const selectedItemCount = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+        const subtotal = selectedItems.reduce((sum, item) => sum + (item.product?.price || 0) * item.quantity, 0);
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
             success: true,
-            data: { items: cartItems, itemCount, subtotal }
+            data: {
+              // format đúng chuẩn cartController.js:13-17
+              items: cartItems.map(item => ({
+                cartItemId: String(item.cartItemId),
+                quantity: Number(item.quantity),
+                selected: Boolean(item.selected),
+                available: item.available !== false,
+                product: {
+                  id: Number(item.product?.id || item.cartItemId),
+                  name: item.product?.name || 'Sản phẩm',
+                  slug: item.product?.slug || 'san-pham',
+                  price: Number(item.product?.price || 150000),
+                  stock: Number(item.product?.stock ?? 20),
+                  status: 'ACTIVE',
+                  category: 'Quà tặng',
+                  occasionTags: [],
+                  recipientTags: [],
+                  imageUrl: item.product?.imageUrl || '/icons.svg',
+                  description: item.product?.description || '',
+                  averageRating: 5,
+                  reviewCount: 1
+                }
+              })),
+              itemCount,
+              selectedItemCount,
+              subtotal
+            }
           })
         });
       }
 
       if (path === '/api/cart/items' && method === 'POST') {
         const payload = JSON.parse(route.request().postData() || '{}');
-        const qty = Number(payload.quantity || 1);
+        const qty = Number(payload.quantity ?? 1);
+        // Siết chặt theo cartController.js:22-23
+        if (!/^\d+$/.test(String(payload.productId || '')) || !Number.isInteger(qty) || qty < 1 || qty > 99) {
+          return route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, message: 'Invalid product or quantity.' })
+          });
+        }
         const existing = cartItems.find(i => String(i.cartItemId) === String(payload.productId));
         if (existing) {
           existing.quantity += qty;
@@ -130,7 +167,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
             quantity: qty,
             selected: true,
             available: true,
-            product: { id: payload.productId, name: 'Sản phẩm ' + payload.productId, price: 150000, stock: 20 }
+            product: { id: Number(payload.productId), name: 'Sản phẩm ' + payload.productId, price: 150000, stock: 20 }
           });
         }
         return route.fulfill({
@@ -142,7 +179,36 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
       if (path === '/api/cart/merge' && method === 'POST') {
         const payload = JSON.parse(route.request().postData() || '{}');
-        for (const item of (payload.items || [])) {
+        // Siết chặt theo cartMergeContract.js:24-35 & cartController.js:48-62
+        const mergeKey = typeof payload.mergeKey === 'string' ? payload.mergeKey
+          : typeof payload.key === 'string' ? payload.key
+          : undefined;
+
+        if (!mergeKey || !/^[A-Za-z0-9:_-]{8,80}$/.test(mergeKey) ||
+            !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 50) {
+          return route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, message: 'Invalid guest cart merge request.' })
+          });
+        }
+
+        for (const item of payload.items) {
+          const qty = Number(item?.quantity);
+          if (!/^\d{1,20}$/.test(String(item?.productId || '')) || !Number.isInteger(qty) || qty < 1 || qty > 99 || typeof item?.selected !== 'boolean') {
+            return route.fulfill({
+              status: 400,
+              contentType: 'application/json',
+              body: JSON.stringify({ success: false, message: 'Guest cart contains an invalid item.' })
+            });
+          }
+        }
+
+        if (typeof options.onMerge === 'function') {
+          options.onMerge(payload);
+        }
+
+        for (const item of payload.items) {
           const existing = cartItems.find(i => String(i.cartItemId) === String(item.productId));
           if (existing) existing.quantity += item.quantity;
           else {
@@ -151,14 +217,14 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
               quantity: item.quantity,
               selected: item.selected !== false,
               available: true,
-              product: { id: item.productId, name: 'Sản phẩm ' + item.productId, price: 120000, stock: 20 }
+              product: { id: Number(item.productId), name: 'Sản phẩm ' + item.productId, price: 120000, stock: 20 }
             });
           }
         }
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ success: true, message: 'Merged' })
+          body: JSON.stringify({ success: true, message: 'Guest cart merged.', data: { mergedItemCount: payload.items.length } })
         });
       }
 
@@ -227,6 +293,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
         });
       }
 
+      // Nguồn contract: core-backend/controllers/orderController.js:224-233
       if (path === '/api/orders/101/reorder' && method === 'POST') {
         cartItems.push({
           cartItemId: '1',
@@ -243,7 +310,9 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
             message: 'Đã thêm 1 sản phẩm từ đơn hàng vào giỏ hàng.',
             data: {
               addedItems: [{ productId: '1', name: 'Hộp quà Tết', quantityAdded: 2, currentPrice: 250000 }],
-              skippedItems: []
+              skippedItems: [],
+              addedCount: 1,
+              skippedCount: 0
             }
           })
         });
@@ -298,6 +367,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
   // Ca 3: Đăng nhập gộp giỏ
   test('Ca 3: Đăng nhập gộp giỏ khách vãng lai -> Badge phản ánh tổng', async ({ page }) => {
+    let capturedMergePayload = null;
     // Khách có 2 món trong guest cart
     await page.addInitScript(() => {
       localStorage.setItem('giftly.guest-cart', JSON.stringify({
@@ -306,15 +376,27 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
         pendingMerge: null
       }));
     });
-    setupApiMocks(page);
+    setupApiMocks(page, {
+      onMerge: (payload) => {
+        capturedMergePayload = payload;
+      }
+    });
 
     await page.goto('/login');
     await page.locator('input[type="email"]').fill('customer@example.com');
     await page.locator('input[type="password"]').fill('password123');
+    const mergeResponsePromise = page.waitForResponse(resp => resp.url().includes('/api/cart/merge'));
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await mergeResponsePromise;
 
     // Sau khi đăng nhập thành công và merge guest cart, chuyển về trang chủ hoặc giỏ hàng
     await expect(page).toHaveURL(/http:\/\/localhost:5173\/?(cart)?/);
+
+    // Xác minh hợp đồng merge thật sự: backend nhận đúng mergeKey và items
+    expect(capturedMergePayload).not.toBeNull();
+    expect(capturedMergePayload.mergeKey).toMatch(/^[A-Za-z0-9:_-]{8,80}$/);
+    expect(capturedMergePayload.items).toEqual([{ productId: '1', quantity: 2, selected: true }]);
+
     await page.goto('/products');
     const badge = page.locator('.store-layout-cart-count');
     await expect(badge).toHaveText('2');
