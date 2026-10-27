@@ -52,8 +52,32 @@ function parseCreateOrderBody(body, rawIdempotencyKey) {
   };
 }
 
+/**
+ * Kiểm tra xem khách hàng có được phép tự hủy đơn hay không.
+ * Nghiệp vụ: Khách chỉ được tự hủy khi đơn ở trạng thái PENDING và UNPAID.
+ * Các trường hợp khác (CONFIRMED, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED) đều bị từ chối 409.
+ *
+ * @param {object} order
+ * @returns {{ canCancel: true, fromStatus: string } | { canCancel: false, status: number, message: string }}
+ */
+function canCustomerCancel(order) {
+  if (!order || typeof order !== 'object') {
+    return { canCancel: false, status: 404, message: 'Order not found.' };
+  }
+  if (order.status !== 'PENDING' || order.payment_status !== 'UNPAID') {
+    return {
+      canCancel: false,
+      status: 409,
+      message: 'Only pending unpaid orders can be cancelled by the customer.'
+    };
+  }
+  return { canCancel: true, fromStatus: order.status };
+}
+
 module.exports = {
   SUPPORTED_SHIPPING_METHODS,
   SUPPORTED_PAYMENT_METHODS,
-  parseCreateOrderBody
+  parseCreateOrderBody,
+  canCustomerCancel
 };
+

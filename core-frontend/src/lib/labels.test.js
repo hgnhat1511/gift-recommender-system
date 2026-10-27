@@ -154,24 +154,40 @@ test('Additional domain labels (coupon discount type, payment attempts, notifica
   assert.equal(getNotificationTypeLabel('ORDER'), 'Đơn hàng');
   assert.equal(getNotificationTypeLabel('SHIPPING'), 'Vận chuyển');
 
-  assert.equal(INVENTORY_REASON['Customer order'], 'Đơn hàng của khách');
-  assert.equal(getInventoryReasonLabel('Customer order'), 'Đơn hàng của khách');
-  assert.equal(getInventoryReasonLabel('Order cancelled; stock restored'), 'Hủy đơn; hoàn tồn kho');
-  assert.equal(getInventoryReasonLabel('Initial stock'), 'Tồn kho ban đầu');
-  assert.equal(getInventoryReasonLabel('Admin adjustment'), 'Quản trị viên điều chỉnh');
-  assert.equal(getInventoryReasonLabel('Return approved; restocked'), 'Đổi trả; nhập lại kho');
-  // Chuỗi mới tiếng Việt từ Khu vực 2
+  // Fixture chuỗi lấy trực tiếp từ git baseline (cfdfdb6 & a310d78) qua git grep
+  const BASELINE_INVENTORY_REASONS = [
+    { raw: 'Customer order', expected: 'Đơn hàng của khách', source: 'orderController.js:114 (a310d78)' },
+    { raw: 'Order cancelled; stock restored', expected: 'Hủy đơn; hoàn tồn kho', source: 'orderController.js:229 (a310d78)' },
+    { raw: 'Return completed; stock restocked', expected: 'Đổi trả; nhập lại kho', source: 'adminController.js:483 (a310d78)' },
+    { raw: 'Initial product stock', expected: 'Tồn kho ban đầu', source: 'adminController.js:182 (a310d78)' },
+    { raw: 'Admin stock adjustment', expected: 'Quản trị viên điều chỉnh', source: 'adminController.js:204 (a310d78)' },
+  ];
+  assert.ok(Object.keys(INVENTORY_REASON).length > 0);
+  for (const item of BASELINE_INVENTORY_REASONS) {
+    assert.equal(getInventoryReasonLabel(item.raw), item.expected, `Lý do kho "${item.raw}" từ ${item.source} phải dịch đúng`);
+  }
+
+  // Chuỗi mới tiếng Việt từ Khu vực 2 (HEAD)
   assert.equal(getInventoryReasonLabel('Đơn hàng của khách'), 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Hủy đơn; hoàn tồn kho'), 'Hủy đơn; hoàn tồn kho');
   assert.equal(getInventoryReasonLabel('Tồn kho ban đầu'), 'Tồn kho ban đầu');
   assert.equal(getInventoryReasonLabel('Quản trị viên điều chỉnh'), 'Quản trị viên điều chỉnh');
   assert.equal(getInventoryReasonLabel('Đổi trả; nhập lại kho'), 'Đổi trả; nhập lại kho');
 
-  // Ghi chú lịch sử đơn hàng (order_status_history.note)
-  assert.equal(getOrderHistoryNoteLabel('Order placed'), 'Khách đặt hàng');
-  assert.equal(getOrderHistoryNoteLabel('Cancelled by customer'), 'Khách hủy đơn');
-  assert.equal(getOrderHistoryNoteLabel('Admin updated status'), 'Quản trị viên cập nhật trạng thái');
-  assert.equal(getOrderHistoryNoteLabel('Carrier picked up'), 'Đơn vị vận chuyển đã lấy hàng');
+  // Ghi chú lịch sử đơn hàng lấy từ git baseline (cfdfdb6 & a310d78)
+  const BASELINE_ORDER_NOTES = [
+    { raw: 'Order placed by customer', expected: 'Khách đặt hàng', source: 'orderController.js:108 (a310d78)' },
+    { raw: 'Cancelled by customer', expected: 'Khách hủy đơn', source: 'orderController.js:220 (a310d78)' },
+    { raw: 'Status updated by admin', expected: 'Quản trị viên cập nhật trạng thái', source: 'adminController.js:304 (a310d78)' },
+    { raw: 'Shipment collected by carrier', expected: 'Đơn vị vận chuyển đã lấy hàng', source: 'shipmentController.js:110 (a310d78)' },
+    { raw: 'GHN shipment update: ready_to_pick', expected: 'Cập nhật vận đơn GHN: Chờ lấy hàng', source: 'shipmentController.js:112 (a310d78)' },
+    { raw: 'GHN shipment update: delivering', expected: 'Cập nhật vận đơn GHN: Đang phát hàng', source: 'shipmentController.js:112 (a310d78)' },
+  ];
+  for (const item of BASELINE_ORDER_NOTES) {
+    assert.equal(getOrderHistoryNoteLabel(item.raw), item.expected, `Ghi chú lịch sử "${item.raw}" từ ${item.source} phải dịch đúng`);
+  }
+
+  // Chuỗi mới tiếng Việt và fallback
   assert.equal(getOrderHistoryNoteLabel('Khách đặt hàng'), 'Khách đặt hàng');
   assert.equal(getOrderHistoryNoteLabel(''), '');
 });

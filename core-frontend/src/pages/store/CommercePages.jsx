@@ -4,6 +4,7 @@ import { ArrowRight, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-re
 import api, { getApiError, getAuth } from '../../lib/api.js';
 import { beginGuestCartMerge, clearGuestCart, clearGuestCartMergePending, completeGuestCartMerge, getGuestCart, getPendingGuestCartMerge, removeGuestCartItem, setGuestCartAllSelected, updateGuestCartItem } from '../../lib/guestCart.js';
 import { emitCartChange } from '../../context/CartContext.jsx';
+import { buildUpdateCartItemPayload, buildUpdateSelectionPayload, buildUpdateAllSelectionPayload, buildCreateOrderPayload } from '../../lib/cartPayloads.js';
 import { getOrderStatusLabel, getPaymentStatusLabel, getPaymentMethodLabel, getReturnStatusLabel, getShippingMethodLabel, getOrderHistoryNoteLabel } from '../../lib/labels.js';
 import { money } from '../../data/catalogOptions.js';
 import './commerce.css';
@@ -50,17 +51,17 @@ export function CartPage(){
     const qty=Math.max(1,Math.min(item.product?.stock||99,Math.min(99,quantity)));
     setError('');
     if(item.isGuest){updateGuestCartItem(item.cartItemId,{quantity:qty});syncGuest();return}
-    try{await api.patch('/cart/items/'+item.cartItemId,{quantity:qty});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không cập nhật được số lượng.'));await load()}
+    try{await api.patch('/cart/items/'+item.cartItemId,buildUpdateCartItemPayload(qty));emitCartChange();await load()}catch(e){setError(getApiError(e,'Không cập nhật được số lượng.'));await load()}
   }
   async function selectItem(item,isSelected){
     setError('');
     if(item.isGuest){updateGuestCartItem(item.cartItemId,{selected:isSelected});syncGuest();return}
-    try{await api.patch('/cart/items/'+item.cartItemId+'/selection',{isSelected});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể thay đổi lựa chọn.'))}
+    try{await api.patch('/cart/items/'+item.cartItemId+'/selection',buildUpdateSelectionPayload(isSelected));emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể thay đổi lựa chọn.'))}
   }
   async function selectAll(isSelected){
     setError('');
     if(authenticated){
-      try{await api.patch('/cart/selection',{isSelected});emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể cập nhật lựa chọn giỏ hàng.'))}
+      try{await api.patch('/cart/selection',buildUpdateAllSelectionPayload(isSelected));emitCartChange();await load()}catch(e){setError(getApiError(e,'Không thể cập nhật lựa chọn giỏ hàng.'))}
     }else{
       setGuestCartAllSelected(isSelected);syncGuest();emitCartChange();
     }
@@ -142,7 +143,7 @@ export function CheckoutPage(){
   const [addresses,setAddresses]=useState([]);const [addressId,setAddressId]=useState('');const [couponCode,setCouponCode]=useState('');const [shippingMethod,setShippingMethod]=useState('STANDARD');const [paymentMethod,setPaymentMethod]=useState('COD');const [availableMethods,setAvailableMethods]=useState({COD:true,VNPAY:false});const [note,setNote]=useState('');const [quote,setQuote]=useState(null);const [cart,setCart]=useState(null);const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const navigate=useNavigate();
   useEffect(()=>{Promise.all([api.get('/account/addresses'),api.get('/cart'),api.get('/payments/methods')]).then(([a,c,m])=>{setAddresses(a.data.data);setAddressId(a.data.data.find(v=>v.isDefault)?.id||a.data.data[0]?.id||'');setCart(c.data.data);setAvailableMethods(m.data.data||{COD:true,VNPAY:false})}).catch(e=>setError(getApiError(e,'Không tải được thông tin thanh toán.'))).finally(()=>setLoading(false))},[]);
   useEffect(()=>{if(!addressId||!cart?.items?.some(item=>item.selected))return;const timer=setTimeout(()=>api.post('/orders/quote',{addressId,couponCode:couponCode.trim()||undefined,shippingMethod}).then(r=>{setQuote(r.data.data);setError('')}).catch(e=>{setQuote(null);setError(getApiError(e,'Không tính được tổng tiền.'))}),250);return()=>clearTimeout(timer)},[addressId,couponCode,shippingMethod,cart?.items]);
-  async function submit(e){e.preventDefault();checkoutKey.current ||= globalThis.crypto?.randomUUID?.()||`giftly-${Date.now()}-${Math.random().toString(36).slice(2)}`;setBusy(true);setError('');try{const {data}=await api.post('/orders',{addressId,couponCode:couponCode.trim()||undefined,note,paymentMethod,shippingMethod},{headers:{'Idempotency-Key':checkoutKey.current}});emitCartChange();if(paymentMethod==='VNPAY'){const payment=await api.post(`/payments/orders/${data.data.orderId}/vnpay`);window.location.assign(payment.data.data.paymentUrl);return}navigate(`/orders/${data.data.orderId}?placed=1`,{replace:true})}catch(e){setError(getApiError(e,'Không thể tạo đơn hàng. Kiểm tra giỏ hàng và thử lại.'))}finally{setBusy(false)}}
+  async function submit(e){e.preventDefault();checkoutKey.current ||= globalThis.crypto?.randomUUID?.()||`giftly-${Date.now()}-${Math.random().toString(36).slice(2)}`;setBusy(true);setError('');try{const {data}=await api.post('/orders',buildCreateOrderPayload({addressId,couponCode,note,paymentMethod,shippingMethod}),{headers:{'Idempotency-Key':checkoutKey.current}});emitCartChange();if(paymentMethod==='VNPAY'){const payment=await api.post(`/payments/orders/${data.data.orderId}/vnpay`);window.location.assign(payment.data.data.paymentUrl);return}navigate(`/orders/${data.data.orderId}?placed=1`,{replace:true})}catch(e){setError(getApiError(e,'Không thể tạo đơn hàng. Kiểm tra giỏ hàng và thử lại.'))}finally{setBusy(false)}}
   if(loading)return <main className="commerce-page commerce-loading">Đang chuẩn bị thanh toán…</main>;
   if(!cart?.items?.length)return <main className="commerce-page"><div className="commerce-empty"><ShoppingBag/><h1>Giỏ hàng đang trống</h1><Link to="/products">Quay lại cửa hàng</Link></div></main>;
   const selectedItems=cart.items.filter(item=>item.selected);

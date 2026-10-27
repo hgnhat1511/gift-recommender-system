@@ -114,22 +114,23 @@ export const NOTIFICATION_TYPE = Object.freeze({
 });
 
 export const INVENTORY_REASON = Object.freeze({
-  // Chuỗi cũ tiếng Anh từ baseline (giữ nguyên để tương thích dữ liệu lịch sử trong DB)
+  // Chuỗi cũ tiếng Anh từ git baseline (cfdfdb6 & a310d78)
   'Customer order': 'Đơn hàng của khách',
   'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
-  'Return approved; restocked': 'Đổi trả; nhập lại kho',
   'Return completed; stock restocked': 'Đổi trả; nhập lại kho',
+  'Initial product stock': 'Tồn kho ban đầu',
+  'Admin stock adjustment': 'Quản trị viên điều chỉnh',
+  // Biến thể rút gọn dự phòng
+  'Return approved; restocked': 'Đổi trả; nhập lại kho',
   'Customer return; stock restored': 'Đổi trả; nhập lại kho',
   'Initial stock': 'Tồn kho ban đầu',
-  'Initial product stock': 'Tồn kho ban đầu',
   'Admin adjustment': 'Quản trị viên điều chỉnh',
-  'Admin stock adjustment': 'Quản trị viên điều chỉnh',
   PURCHASE: 'Nhập hàng',
   SALE: 'Bán hàng',
   RETURN: 'Đổi trả hàng',
   ADJUSTMENT: 'Kiểm kê điều chỉnh',
 
-  // Chuỗi tiếng Việt chuẩn từ Khu vực 2
+  // Chuỗi tiếng Việt chuẩn từ Khu vực 2 (HEAD)
   'Đơn hàng của khách': 'Đơn hàng của khách',
   'Hủy đơn; hoàn tồn kho': 'Hủy đơn; hoàn tồn kho',
   'Đổi trả; nhập lại kho': 'Đổi trả; nhập lại kho',
@@ -138,15 +139,27 @@ export const INVENTORY_REASON = Object.freeze({
 });
 
 export const ORDER_HISTORY_NOTES = Object.freeze({
-  'Order placed': 'Khách đặt hàng',
+  // Chuỗi tiếng Anh từ git baseline (cfdfdb6 & a310d78)
+  'Order placed by customer': 'Khách đặt hàng',
   'Cancelled by customer': 'Khách hủy đơn',
+  'Status updated by admin': 'Quản trị viên cập nhật trạng thái',
+  'Shipment collected by carrier': 'Đơn vị vận chuyển đã lấy hàng',
+
+  // Biến thể rút gọn dự phòng
+  'Order placed': 'Khách đặt hàng',
   'Admin updated status': 'Quản trị viên cập nhật trạng thái',
   'Carrier picked up': 'Đơn vị vận chuyển đã lấy hàng',
 });
 
 export function getOrderHistoryNoteLabel(note) {
   if (!note) return '';
-  return ORDER_HISTORY_NOTES[note] || note;
+  if (ORDER_HISTORY_NOTES[note]) return ORDER_HISTORY_NOTES[note];
+  // Xử lý ghi chú webhook GHN cũ: GHN shipment update: <status>
+  if (typeof note === 'string' && note.startsWith('GHN shipment update: ')) {
+    const rawStatus = note.slice('GHN shipment update: '.length).trim();
+    return `Cập nhật vận đơn GHN: ${getShipmentStatusLabel(rawStatus)}`;
+  }
+  return note;
 }
 
 export const REVIEW_APPROVAL_STATUS = Object.freeze({
@@ -202,11 +215,21 @@ export function getShippingMethodLabel(method) {
   return lookup(SHIPPING_METHOD, method, 'shipping_method');
 }
 
+const GHN_STATUS_MAP = Object.freeze({
+  READY_TO_PICK: 'READY_FOR_PICKUP',
+  DELIVERING: 'OUT_FOR_DELIVERY',
+  DELIVERY_FAIL: 'DELIVERY_FAILED',
+  RETURN: 'RETURNING',
+  RETURNED: 'RETURNED',
+  CANCEL: 'CANCELLED',
+  EXCEPTION: 'ISSUE',
+});
+
 export function getShipmentStatusLabel(status) {
   if (!status) return '';
   const key = String(status).trim().toUpperCase();
-  if (key === 'READY_TO_PICK') return SHIPMENT_STATUS.READY_FOR_PICKUP;
-  return lookup(SHIPMENT_STATUS, key, 'shipment_status');
+  const normalizedKey = GHN_STATUS_MAP[key] || key;
+  return lookup(SHIPMENT_STATUS, normalizedKey, 'shipment_status');
 }
 
 export function getCustomerStatusLabel(status) {

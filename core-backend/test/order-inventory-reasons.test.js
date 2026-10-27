@@ -9,41 +9,26 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-
-// Hàm thuần mô phỏng quy tắc kiểm tra điều kiện hủy đơn của customer (orderController.js:cancelMine)
-function canCustomerCancelOrder(order) {
-  if (!order || typeof order !== 'object') {
-    return { canCancel: false, status: 404, message: 'Order not found.' };
-  }
-  // Khách chỉ được hủy khi PENDING và UNPAID
-  if (order.status !== 'PENDING' || order.payment_status !== 'UNPAID') {
-    return {
-      canCancel: false,
-      status: 409,
-      message: 'Only pending unpaid orders can be cancelled by the customer.'
-    };
-  }
-  return { canCancel: true, fromStatus: order.status };
-}
+const { canCustomerCancel } = require('../utils/orderContract');
 
 describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều kiện hủy đơn', () => {
   test('1. Đơn PENDING + UNPAID: Khách hàng được phép hủy', () => {
     const order = { id: 1, status: 'PENDING', payment_status: 'UNPAID' };
-    const result = canCustomerCancelOrder(order);
+    const result = canCustomerCancel(order);
     assert.equal(result.canCancel, true);
     assert.equal(result.fromStatus, 'PENDING');
   });
 
   test('2. Đơn CONFIRMED + UNPAID: Khách hàng KHÔNG được hủy trực tiếp -> 409 (phải qua admin)', () => {
     const order = { id: 2, status: 'CONFIRMED', payment_status: 'UNPAID' };
-    const result = canCustomerCancelOrder(order);
+    const result = canCustomerCancel(order);
     assert.equal(result.canCancel, false);
     assert.equal(result.status, 409);
   });
 
   test('3. Đơn đã thanh toán (PAID): Khách hàng không được hủy trực tiếp -> 409', () => {
     const order = { id: 3, status: 'PENDING', payment_status: 'PAID' };
-    const result = canCustomerCancelOrder(order);
+    const result = canCustomerCancel(order);
     assert.equal(result.canCancel, false);
     assert.equal(result.status, 409);
   });
@@ -51,7 +36,7 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
   test('4. Đơn PROCESSING / SHIPPED / DELIVERED: Khách hàng không được hủy -> 409', () => {
     for (const status of ['PROCESSING', 'SHIPPED', 'DELIVERED']) {
       const order = { id: 4, status, payment_status: 'UNPAID' };
-      const result = canCustomerCancelOrder(order);
+      const result = canCustomerCancel(order);
       assert.equal(result.canCancel, false, `Không được hủy đơn ở trạng thái ${status}`);
       assert.equal(result.status, 409);
     }
@@ -59,7 +44,7 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
 
   test('5. Đơn đã hủy (CANCELLED): Không được hủy lần nữa -> 409', () => {
     const order = { id: 5, status: 'CANCELLED', payment_status: 'UNPAID' };
-    const result = canCustomerCancelOrder(order);
+    const result = canCustomerCancel(order);
     assert.equal(result.canCancel, false);
     assert.equal(result.status, 409);
   });

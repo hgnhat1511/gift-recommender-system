@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const pool = require('../config/db');
 const vnpay = require('../services/payments/vnpay');
 const { calculateReorderItems } = require('../utils/cartHelper');
+const { canCustomerCancel, parseCreateOrderBody } = require('../utils/orderContract');
 
 const cents = (value) => Math.round(Number(value) * 100);
 const amount = (value) => Number((value / 100).toFixed(2));
@@ -92,17 +93,12 @@ async function quote(req, res, next) {
 }
 
 async function create(req, res, next) {
-    const paymentMethod = req.body?.paymentMethod || 'COD';
-    if (!/^\d+$/.test(String(req.body?.addressId || '')) ||
-        (req.body?.couponCode != null && (typeof req.body.couponCode !== 'string' || req.body.couponCode.length > 40)) ||
-        (req.body?.note != null && (typeof req.body.note !== 'string' || req.body.note.length > 1000)) ||
-        (req.body?.shippingMethod != null && !Object.hasOwn(shippingMethods, req.body.shippingMethod)) ||
-        !['COD','VNPAY'].includes(paymentMethod)) {
-        return res.status(400).json({ success:false,message:'Invalid checkout information. Choose a supported delivery and payment method.' });
+    const parsed = parseCreateOrderBody(req.body, req.get('Idempotency-Key'));
+    if (!parsed.ok) {
+        return res.status(parsed.status).json({ success: false, message: parsed.message });
     }
-    if(paymentMethod==='VNPAY'&&!vnpay.isConfigured())return res.status(503).json({success:false,message:'Online payment is not configured for this environment.'});
-    const requestKey=req.get('Idempotency-Key')?.trim()||null;
-    if(requestKey&&(!/^[A-Za-z0-9:_-]{8,100}$/.test(requestKey)))return res.status(400).json({success:false,message:'Invalid Idempotency-Key.'});
+    const { addressId, couponCode, note, shippingMethod, paymentMethod, idempotencyKey: requestKey } = parsed;
+    if (paymentMethod === 'VNPAY' && !vnpay.isConfigured()) return res.status(503).json({ success: false, message: 'Online payment is not configured for this environment.' });
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -113,14 +109,14 @@ async function create(req, res, next) {
             const [existing]=await connection.execute('SELECT id,order_code,status,total_amount,shipping_method,payment_method FROM orders WHERE user_id=? AND idempotency_key=? LIMIT 1',[req.user.id,requestKey]);
             if(existing[0]){await connection.commit();return res.status(200).json({success:true,message:'This checkout request was already processed.',data:{orderId:String(existing[0].id),orderCode:existing[0].order_code,status:existing[0].status,paymentMethod:existing[0].payment_method,shippingMethod:existing[0].shipping_method||'STANDARD',total:Number(existing[0].total_amount)}})}
         }
-        const totals = await quoteTotals(connection,req.user.id,req.body.addressId,req.body.couponCode,true,req.body.shippingMethod||'STANDARD');
+        const totals = await quoteTotals(connection,req.user.id,addressId,couponCode,true,shippingMethod);
         if (totals.error) { await connection.rollback(); return res.status(409).json({ success:false,message:totals.error,data:totals.data }); }
         const orderCode = `GL${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         const address = totals.address;
         const [created] = await connection.execute(`INSERT INTO orders
             (order_code,idempotency_key,user_id,status,payment_method,shipping_method,payment_status,recipient_name,phone,shipping_address,customer_note,coupon_code,subtotal,discount_amount,shipping_fee,total_amount)
             VALUES (?,?,?, 'PENDING',?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
-            [orderCode,requestKey,req.user.id,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),req.body.note?.trim() || null,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
+            [orderCode,requestKey,req.user.id,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
         const orderId = created.insertId;
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Khách đặt hàng']);
         for (const item of totals.items) {
@@ -280,10 +276,11 @@ async function cancelMine(req,res,next){
         await connection.beginTransaction();
         const [orders]=await connection.execute('SELECT * FROM orders WHERE id=? AND user_id=? FOR UPDATE',[req.params.id,req.user.id]);
         const order=orders[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(order.status!=='PENDING'||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending unpaid orders can be cancelled by the customer.'})}
+        const check=canCustomerCancel(order);
+        if(!check.canCancel){await connection.rollback();return res.status(check.status).json({success:false,message:check.message})}
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,'CANCELLED','Khách hủy đơn']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,check.fromStatus,'CANCELLED','Khách hủy đơn']);
         await releaseCoupon(connection,order.id);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đơn hàng đã hủy',?,?)",[req.user.id,`Đơn ${order.order_code} đã được hủy.`,order.id]);
         await connection.commit();return res.json({success:true,message:'Order cancelled.'});
