@@ -82,7 +82,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
       }).catch(() => null);
       if (ordersResponse?.ok()) {
         const { data: orders } = await ordersResponse.json();
-        for (const order of orders.items.filter((item) => ['PENDING', 'CONFIRMED'].includes(item.status) && item.paymentStatus === 'UNPAID')) {
+        for (const order of orders.items.filter((item) => item.status === 'PENDING' && item.paymentStatus === 'UNPAID')) {
           await api.post(`/api/orders/${order.id}/cancel`, {
             headers: { authorization: `Bearer ${token}` },
           });
@@ -364,7 +364,7 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
               headers: { authorization: `Bearer ${adminToken}` },
               data: { status: 'CANCELLED', note: 'Playwright E2E cleanup' },
             });
-          } else if (['PENDING', 'CONFIRMED'].includes(order.status)) {
+          } else if (order.status === 'PENDING') {
             await api.post(`/api/orders/${order.id}/cancel`, {
               headers: { authorization: `Bearer ${customerToken}` },
             });
@@ -563,7 +563,7 @@ test('admin can record shipment tracking and the customer can see its history', 
               headers: { authorization: `Bearer ${adminToken}` },
               data: { status: 'CANCELLED', note: 'Playwright E2E cleanup' },
             });
-          } else if (['PENDING', 'CONFIRMED'].includes(currentOrder.status)) {
+          } else if (currentOrder.status === 'PENDING') {
             await api.post(`/api/orders/${orderId}/cancel`, { headers: customerAuth });
           }
         }
@@ -756,7 +756,7 @@ test('customer review and return flows require delivery, publish through admin r
             });
           }
         } else if (order.paymentStatus === 'UNPAID') {
-          if (['PENDING', 'CONFIRMED'].includes(order.status)) {
+          if (order.status === 'PENDING') {
             await api.post(`/api/orders/${orderId}/cancel`, { headers: customerAuth });
           } else {
             await api.patch(`/api/admin/orders/${orderId}/status`, {

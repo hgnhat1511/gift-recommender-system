@@ -15,12 +15,12 @@ function canCustomerCancelOrder(order) {
   if (!order || typeof order !== 'object') {
     return { canCancel: false, status: 404, message: 'Order not found.' };
   }
-  const allowedStatuses = ['PENDING', 'CONFIRMED'];
-  if (!allowedStatuses.includes(order.status) || order.payment_status !== 'UNPAID') {
+  // Khách chỉ được hủy khi PENDING và UNPAID
+  if (order.status !== 'PENDING' || order.payment_status !== 'UNPAID') {
     return {
       canCancel: false,
       status: 409,
-      message: 'Only pending or confirmed unpaid orders can be cancelled by the customer.'
+      message: 'Only pending unpaid orders can be cancelled by the customer.'
     };
   }
   return { canCancel: true, fromStatus: order.status };
@@ -34,11 +34,11 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
     assert.equal(result.fromStatus, 'PENDING');
   });
 
-  test('2. Đơn CONFIRMED + UNPAID: Khách hàng được phép hủy (mở rộng Khu vực 2)', () => {
+  test('2. Đơn CONFIRMED + UNPAID: Khách hàng KHÔNG được hủy trực tiếp -> 409 (phải qua admin)', () => {
     const order = { id: 2, status: 'CONFIRMED', payment_status: 'UNPAID' };
     const result = canCustomerCancelOrder(order);
-    assert.equal(result.canCancel, true);
-    assert.equal(result.fromStatus, 'CONFIRMED');
+    assert.equal(result.canCancel, false);
+    assert.equal(result.status, 409);
   });
 
   test('3. Đơn đã thanh toán (PAID): Khách hàng không được hủy trực tiếp -> 409', () => {
@@ -91,3 +91,4 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
     }
   });
 });
+

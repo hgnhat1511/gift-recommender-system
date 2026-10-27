@@ -114,12 +114,15 @@ export const NOTIFICATION_TYPE = Object.freeze({
 });
 
 export const INVENTORY_REASON = Object.freeze({
-  // Chuỗi cũ tiếng Anh (giữ nguyên để tương thích dữ liệu lịch sử)
+  // Chuỗi cũ tiếng Anh từ baseline (giữ nguyên để tương thích dữ liệu lịch sử trong DB)
   'Customer order': 'Đơn hàng của khách',
   'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
+  'Return approved; restocked': 'Đổi trả; nhập lại kho',
   'Return completed; stock restocked': 'Đổi trả; nhập lại kho',
   'Customer return; stock restored': 'Đổi trả; nhập lại kho',
+  'Initial stock': 'Tồn kho ban đầu',
   'Initial product stock': 'Tồn kho ban đầu',
+  'Admin adjustment': 'Quản trị viên điều chỉnh',
   'Admin stock adjustment': 'Quản trị viên điều chỉnh',
   PURCHASE: 'Nhập hàng',
   SALE: 'Bán hàng',
@@ -133,6 +136,18 @@ export const INVENTORY_REASON = Object.freeze({
   'Tồn kho ban đầu': 'Tồn kho ban đầu',
   'Quản trị viên điều chỉnh': 'Quản trị viên điều chỉnh',
 });
+
+export const ORDER_HISTORY_NOTES = Object.freeze({
+  'Order placed': 'Khách đặt hàng',
+  'Cancelled by customer': 'Khách hủy đơn',
+  'Admin updated status': 'Quản trị viên cập nhật trạng thái',
+  'Carrier picked up': 'Đơn vị vận chuyển đã lấy hàng',
+});
+
+export function getOrderHistoryNoteLabel(note) {
+  if (!note) return '';
+  return ORDER_HISTORY_NOTES[note] || note;
+}
 
 export const REVIEW_APPROVAL_STATUS = Object.freeze({
   0: 'Chờ duyệt',

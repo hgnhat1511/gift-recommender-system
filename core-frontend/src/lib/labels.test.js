@@ -34,6 +34,7 @@ import {
   getNotificationTypeLabel,
   getInventoryReasonLabel,
   getReviewApprovalLabel,
+  getOrderHistoryNoteLabel,
 } from './labels.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -156,12 +157,23 @@ test('Additional domain labels (coupon discount type, payment attempts, notifica
   assert.equal(INVENTORY_REASON['Customer order'], 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Customer order'), 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Order cancelled; stock restored'), 'Hủy đơn; hoàn tồn kho');
+  assert.equal(getInventoryReasonLabel('Initial stock'), 'Tồn kho ban đầu');
+  assert.equal(getInventoryReasonLabel('Admin adjustment'), 'Quản trị viên điều chỉnh');
+  assert.equal(getInventoryReasonLabel('Return approved; restocked'), 'Đổi trả; nhập lại kho');
   // Chuỗi mới tiếng Việt từ Khu vực 2
   assert.equal(getInventoryReasonLabel('Đơn hàng của khách'), 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Hủy đơn; hoàn tồn kho'), 'Hủy đơn; hoàn tồn kho');
   assert.equal(getInventoryReasonLabel('Tồn kho ban đầu'), 'Tồn kho ban đầu');
   assert.equal(getInventoryReasonLabel('Quản trị viên điều chỉnh'), 'Quản trị viên điều chỉnh');
   assert.equal(getInventoryReasonLabel('Đổi trả; nhập lại kho'), 'Đổi trả; nhập lại kho');
+
+  // Ghi chú lịch sử đơn hàng (order_status_history.note)
+  assert.equal(getOrderHistoryNoteLabel('Order placed'), 'Khách đặt hàng');
+  assert.equal(getOrderHistoryNoteLabel('Cancelled by customer'), 'Khách hủy đơn');
+  assert.equal(getOrderHistoryNoteLabel('Admin updated status'), 'Quản trị viên cập nhật trạng thái');
+  assert.equal(getOrderHistoryNoteLabel('Carrier picked up'), 'Đơn vị vận chuyển đã lấy hàng');
+  assert.equal(getOrderHistoryNoteLabel('Khách đặt hàng'), 'Khách đặt hàng');
+  assert.equal(getOrderHistoryNoteLabel(''), '');
 });
 
 test('Unknown values return raw string without crashing', () => {

@@ -280,7 +280,7 @@ async function cancelMine(req,res,next){
         await connection.beginTransaction();
         const [orders]=await connection.execute('SELECT * FROM orders WHERE id=? AND user_id=? FOR UPDATE',[req.params.id,req.user.id]);
         const order=orders[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(!['PENDING','CONFIRMED'].includes(order.status)||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending or confirmed unpaid orders can be cancelled by the customer.'})}
+        if(order.status!=='PENDING'||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending unpaid orders can be cancelled by the customer.'})}
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,'CANCELLED','Khách hủy đơn']);

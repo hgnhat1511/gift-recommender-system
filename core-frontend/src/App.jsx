@@ -216,12 +216,12 @@ function App() {
           <div className="section-heading">
             <div>
               <span className="section-kicker">GIFTLY PICKS</span>
-              <h2>{recommendations.method === 'personalized_activity' ? <>G&#7907;i &#253; ri&#234;ng cho <span>b&#7841;n</span></> : <>M&#243;n qu&#224; &#273;ang &#273;&#432;&#7907;c y&#234;u th&#237;ch</>}</h2>
+              <h2>{recommendations.method === 'personalized_activity' ? <>Gợi ý riêng cho <span>bạn</span></> : <>Món quà đang được yêu thích</>}</h2>
               <p>{recommendations.method === 'personalized_activity'
-                ? '\u0050h\u00e2n t\u00edch l\u01b0\u1ee3t xem, s\u1edf th\u00edch v\u00e0 t\u01b0\u01a1ng t\u00e1c g\u1ea7n \u0111\u00e2y c\u1ee7a t\u00e0i kho\u1ea3n.'
-                : 'Nh\u1eefng s\u1ea3n ph\u1ea9m c\u00f2n h\u00e0ng trong catalog Giftly.'}</p>
+                ? 'Phân tích lượt xem, sở thích và tương tác gần đây của tài khoản.'
+                : 'Những sản phẩm còn hàng trong catalog Giftly.'}</p>
             </div>
-            <Link to="/products" className="text-link">Xem th&#234;m <ArrowRight size={17} /></Link>
+            <Link to="/products" className="text-link">Xem thêm <ArrowRight size={17} /></Link>
           </div>
           <div className="commerce-product-grid home-catalog-grid">
             {recommendations.items.map((product) => <ProductCard

@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { parseMergeBody } from '../../core-backend/utils/cartMergeContract.js';
+import { parseAddCartItemBody } from '../../core-backend/utils/cartItemContract.js';
 
 test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)', () => {
   function setupApiMocks(page, options = {}) {
@@ -149,25 +151,24 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
       if (path === '/api/cart/items' && method === 'POST') {
         const payload = JSON.parse(route.request().postData() || '{}');
-        const qty = Number(payload.quantity ?? 1);
-        // Siết chặt theo cartController.js:22-23
-        if (!/^\d+$/.test(String(payload.productId || '')) || !Number.isInteger(qty) || qty < 1 || qty > 99) {
+        const parsed = parseAddCartItemBody(payload);
+        if (!parsed.ok) {
           return route.fulfill({
-            status: 400,
+            status: parsed.status,
             contentType: 'application/json',
-            body: JSON.stringify({ success: false, message: 'Invalid product or quantity.' })
+            body: JSON.stringify({ success: false, message: parsed.message })
           });
         }
-        const existing = cartItems.find(i => String(i.cartItemId) === String(payload.productId));
+        const existing = cartItems.find(i => String(i.cartItemId) === String(parsed.productId));
         if (existing) {
-          existing.quantity += qty;
+          existing.quantity += parsed.quantity;
         } else {
           cartItems.push({
-            cartItemId: String(payload.productId),
-            quantity: qty,
+            cartItemId: String(parsed.productId),
+            quantity: parsed.quantity,
             selected: true,
             available: true,
-            product: { id: Number(payload.productId), name: 'Sản phẩm ' + payload.productId, price: 150000, stock: 20 }
+            product: { id: Number(parsed.productId), name: 'Sản phẩm ' + parsed.productId, price: 150000, stock: 20 }
           });
         }
         return route.fulfill({
@@ -179,36 +180,20 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
       if (path === '/api/cart/merge' && method === 'POST') {
         const payload = JSON.parse(route.request().postData() || '{}');
-        // Siết chặt theo cartMergeContract.js:24-35 & cartController.js:48-62
-        const mergeKey = typeof payload.mergeKey === 'string' ? payload.mergeKey
-          : typeof payload.key === 'string' ? payload.key
-          : undefined;
-
-        if (!mergeKey || !/^[A-Za-z0-9:_-]{8,80}$/.test(mergeKey) ||
-            !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 50) {
+        const parsed = parseMergeBody(payload);
+        if (!parsed.ok) {
           return route.fulfill({
-            status: 400,
+            status: parsed.status,
             contentType: 'application/json',
-            body: JSON.stringify({ success: false, message: 'Invalid guest cart merge request.' })
+            body: JSON.stringify({ success: false, message: parsed.message })
           });
-        }
-
-        for (const item of payload.items) {
-          const qty = Number(item?.quantity);
-          if (!/^\d{1,20}$/.test(String(item?.productId || '')) || !Number.isInteger(qty) || qty < 1 || qty > 99 || typeof item?.selected !== 'boolean') {
-            return route.fulfill({
-              status: 400,
-              contentType: 'application/json',
-              body: JSON.stringify({ success: false, message: 'Guest cart contains an invalid item.' })
-            });
-          }
         }
 
         if (typeof options.onMerge === 'function') {
           options.onMerge(payload);
         }
 
-        for (const item of payload.items) {
+        for (const item of parsed.items) {
           const existing = cartItems.find(i => String(i.cartItemId) === String(item.productId));
           if (existing) existing.quantity += item.quantity;
           else {
@@ -224,7 +209,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ success: true, message: 'Guest cart merged.', data: { mergedItemCount: payload.items.length } })
+          body: JSON.stringify({ success: true, message: 'Guest cart merged.', data: { mergedItemCount: parsed.items.length } })
         });
       }
 
