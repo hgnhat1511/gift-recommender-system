@@ -156,6 +156,12 @@ test('Additional domain labels (coupon discount type, payment attempts, notifica
   assert.equal(INVENTORY_REASON['Customer order'], 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Customer order'), 'Đơn hàng của khách');
   assert.equal(getInventoryReasonLabel('Order cancelled; stock restored'), 'Hủy đơn; hoàn tồn kho');
+  // Chuỗi mới tiếng Việt từ Khu vực 2
+  assert.equal(getInventoryReasonLabel('Đơn hàng của khách'), 'Đơn hàng của khách');
+  assert.equal(getInventoryReasonLabel('Hủy đơn; hoàn tồn kho'), 'Hủy đơn; hoàn tồn kho');
+  assert.equal(getInventoryReasonLabel('Tồn kho ban đầu'), 'Tồn kho ban đầu');
+  assert.equal(getInventoryReasonLabel('Quản trị viên điều chỉnh'), 'Quản trị viên điều chỉnh');
+  assert.equal(getInventoryReasonLabel('Đổi trả; nhập lại kho'), 'Đổi trả; nhập lại kho');
 });
 
 test('Unknown values return raw string without crashing', () => {

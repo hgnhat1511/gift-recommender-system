@@ -179,7 +179,7 @@ async function createProduct(req,res,next){
         if(value.categoryId){const [[category]]=await connection.execute('SELECT id FROM categories WHERE id=? AND is_active=1',[value.categoryId]);if(!category){await connection.rollback();return res.status(400).json({success:false,message:'Choose an active category.'})}}
         const [result]=await connection.execute(`INSERT INTO products (category_id,name,description,price,stock,image_url,status,occasion_tags,recipient_tags,interest_tags,style,gift_type,is_featured)
             VALUES (?,?,?,?,?,?,?,CAST(? AS JSON),CAST(? AS JSON),CAST(? AS JSON),?,?,?)`,[value.categoryId,value.name,value.description,value.price,value.stock,value.imageUrl,value.status,JSON.stringify(value.occasionTags),JSON.stringify(value.recipientTags),JSON.stringify(value.interestTags),value.style,value.giftType,value.isFeatured]);
-        if(value.stock)await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason) VALUES (?,?,?,'Initial product stock')",[result.insertId,req.user.id,value.stock]);
+        if(value.stock)await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason) VALUES (?,?,?,'Tồn kho ban đầu')",[result.insertId,req.user.id,value.stock]);
         await saveProductGallery(connection,result.insertId,value.galleryImages||[],value.name);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'PRODUCT_CREATE','product',result.insertId,JSON.stringify({name:value.name,galleryImageCount:value.galleryImages?.length||0})]);
         const product=await productAdminView(connection,result.insertId);
@@ -201,7 +201,7 @@ async function updateProduct(req,res,next){
             [value.categoryId,value.name,value.description,value.price,value.stock,value.imageUrl,value.status,JSON.stringify(value.occasionTags),JSON.stringify(value.recipientTags),JSON.stringify(value.interestTags),value.style,value.giftType,value.isFeatured,req.params.id]);
         await saveProductGallery(connection,req.params.id,value.galleryImages,value.name);
         const delta=value.stock-Number(current[0].stock);
-        if(delta)await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason) VALUES (?,?,?,?)',[req.params.id,req.user.id,delta,String(req.body.stockReason||'Admin stock adjustment').slice(0,300)]);
+        if(delta)await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason) VALUES (?,?,?,?)',[req.params.id,req.user.id,delta,String(req.body.stockReason||'Quản trị viên điều chỉnh').slice(0,300)]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'PRODUCT_UPDATE','product',req.params.id,JSON.stringify({name:value.name,stockDelta:delta,galleryImageCount:value.galleryImages?.length})]);
         const product=await productAdminView(connection,req.params.id);
         await connection.commit();
@@ -301,7 +301,7 @@ async function updateOrderStatus(req,res,next){
         if(status==='CANCELLED'&&order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Paid orders cannot be cancelled until a refund workflow is available.'})}
         if(status==='CANCELLED'){await restoreStock(connection,order.id,req.user.id);await releaseCoupon(connection,order.id)}
         await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[status,status,order.id]);
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Status updated by admin']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Quản trị viên cập nhật trạng thái']);
         await connection.execute('INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (? ,\'ORDER\',?,?,?)',[order.user_id,`Cập nhật đơn ${order.order_code}`,`Trạng thái đơn hàng: ${status}.`,order.id]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'ORDER_STATUS','order',order.id,JSON.stringify({from:order.status,to:status,note:note||null})]);
         await connection.commit();return res.json({success:true,data:{orderCode:order.order_code,status,paymentStatus:status==='DELIVERED'&&order.payment_method==='COD'?'PAID':order.payment_status}});
@@ -480,7 +480,7 @@ async function updateReturn(req,res,next){
             const [items]=await connection.execute('SELECT product_id,quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL',[request.order_id]);
             for(const item of items){
                 await connection.execute('UPDATE products SET stock=stock+? WHERE id=?',[item.quantity,item.product_id]);
-                await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,'Return completed; stock restocked',?)",[item.product_id,req.user.id,item.quantity,request.order_id]);
+                await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,'Đổi trả; nhập lại kho',?)",[item.product_id,req.user.id,item.quantity,request.order_id]);
             }
         }
         await connection.execute('UPDATE return_requests SET status=?,admin_note=? WHERE id=?',[status,adminNote?.trim()||null,request.id]);

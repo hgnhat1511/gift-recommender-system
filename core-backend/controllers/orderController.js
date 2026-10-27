@@ -122,7 +122,7 @@ async function create(req, res, next) {
             VALUES (?,?,?, 'PENDING',?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
             [orderCode,requestKey,req.user.id,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),req.body.note?.trim() || null,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
         const orderId = created.insertId;
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Order placed by customer']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Khách đặt hàng']);
         for (const item of totals.items) {
             const [updated] = await connection.execute('UPDATE products SET stock=stock-? WHERE id=? AND status=\'ACTIVE\' AND stock>=?', [item.quantity,item.product_id,item.quantity]);
             if (updated.affectedRows !== 1) {
@@ -145,7 +145,7 @@ async function create(req, res, next) {
             }
             await connection.execute('INSERT INTO order_items (order_id,product_id,product_name,image_url,unit_price,quantity,line_total) VALUES (?,?,?,?,?,?,?)',
                 [orderId,item.product_id,item.name,item.image_url,Number(item.price),item.quantity,amount(cents(item.price)*Number(item.quantity))]);
-            await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,\'Customer order\',?)', [item.product_id,req.user.id,-Number(item.quantity),orderId]);
+            await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,\'Đơn hàng của khách\',?)', [item.product_id,req.user.id,-Number(item.quantity),orderId]);
             await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'PURCHASE')", [req.user.id,item.product_id]);
         }
         if (totals.coupon) {
@@ -280,10 +280,10 @@ async function cancelMine(req,res,next){
         await connection.beginTransaction();
         const [orders]=await connection.execute('SELECT * FROM orders WHERE id=? AND user_id=? FOR UPDATE',[req.params.id,req.user.id]);
         const order=orders[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(order.status!=='PENDING'||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending unpaid orders can be cancelled by the customer.'})}
+        if(!['PENDING','CONFIRMED'].includes(order.status)||order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Only pending or confirmed unpaid orders can be cancelled by the customer.'})}
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,'PENDING','CANCELLED','Cancelled by customer']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,'CANCELLED','Khách hủy đơn']);
         await releaseCoupon(connection,order.id);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đơn hàng đã hủy',?,?)",[req.user.id,`Đơn ${order.order_code} đã được hủy.`,order.id]);
         await connection.commit();return res.json({success:true,message:'Order cancelled.'});
@@ -292,7 +292,7 @@ async function cancelMine(req,res,next){
 
 async function restoreStock(connection,orderId,userId){
     const [items]=await connection.execute('SELECT product_id,quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL',[orderId]);
-    for(const item of items){await connection.execute('UPDATE products SET stock=stock+? WHERE id=?',[item.quantity,item.product_id]);await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,'Order cancelled; stock restored',?)",[item.product_id,userId,item.quantity,orderId])}
+    for(const item of items){await connection.execute('UPDATE products SET stock=stock+? WHERE id=?',[item.quantity,item.product_id]);await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,'Hủy đơn; hoàn tồn kho',?)",[item.product_id,userId,item.quantity,orderId])}
 }
 
 async function releaseCoupon(connection,orderId){

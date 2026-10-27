@@ -114,6 +114,7 @@ export const NOTIFICATION_TYPE = Object.freeze({
 });
 
 export const INVENTORY_REASON = Object.freeze({
+  // Chuỗi cũ tiếng Anh (giữ nguyên để tương thích dữ liệu lịch sử)
   'Customer order': 'Đơn hàng của khách',
   'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
   'Return completed; stock restocked': 'Đổi trả; nhập lại kho',
@@ -124,6 +125,13 @@ export const INVENTORY_REASON = Object.freeze({
   SALE: 'Bán hàng',
   RETURN: 'Đổi trả hàng',
   ADJUSTMENT: 'Kiểm kê điều chỉnh',
+
+  // Chuỗi tiếng Việt chuẩn từ Khu vực 2
+  'Đơn hàng của khách': 'Đơn hàng của khách',
+  'Hủy đơn; hoàn tồn kho': 'Hủy đơn; hoàn tồn kho',
+  'Đổi trả; nhập lại kho': 'Đổi trả; nhập lại kho',
+  'Tồn kho ban đầu': 'Tồn kho ban đầu',
+  'Quản trị viên điều chỉnh': 'Quản trị viên điều chỉnh',
 });
 
 export const REVIEW_APPROVAL_STATUS = Object.freeze({

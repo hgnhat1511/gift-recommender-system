@@ -107,9 +107,9 @@ async function ghnWebhook(req,res,next) {
             if(['PICKING','PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY'].includes(status)&&order.status==='PROCESSING')nextStatus='SHIPPED';
             if(status==='DELIVERED'&&['PROCESSING','SHIPPED'].includes(order.status))nextStatus='DELIVERED';
             if(nextStatus){
-                if(nextStatus==='DELIVERED'&&order.status==='PROCESSING')await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,\'PROCESSING\',\'SHIPPED\',\'Shipment collected by carrier\')',[order.id]);
+                if(nextStatus==='DELIVERED'&&order.status==='PROCESSING')await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,\'PROCESSING\',\'SHIPPED\',\'Đơn vị vận chuyển đã lấy hàng\')',[order.id]);
                 await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[nextStatus,nextStatus,order.id]);
-                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,?,?)',[order.id,order.status,nextStatus,`GHN shipment update: ${status}`]);
+                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,?,?)',[order.id,order.status,nextStatus,`Cập nhật vận đơn GHN: ${status}`]);
                 await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'SHIPPING',?,?,?)",[order.user_id,`Cập nhật đơn ${order.order_code}`,`Đơn vận chuyển GHN: ${status}.`,order.id]);
             }
         }
