@@ -43,6 +43,7 @@ import {
   interests,
   styles,
   giftTypes,
+  formatReasonLabel,
 } from '../data/catalogOptions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -248,17 +249,17 @@ test('All enum values in enums.snapshot.json must have non-empty Vietnamese labe
 });
 
 test('getNotificationBodyLabel handles old DB notification bodies and translates enums to Vietnamese', () => {
-  // Mẫu cũ trạng thái đơn hàng
+  // 1. Mẫu cũ trạng thái đơn hàng (Nguồn: cfdfdb6:core-backend/controllers/adminController.js:304)
   assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: PROCESSING.'), 'Trạng thái đơn hàng: Đang chuẩn bị hàng.');
   assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: CONFIRMED'), 'Trạng thái đơn hàng: Đã xác nhận.');
-  assert.equal(getNotificationBodyLabel('Order status: CANCELLED.'), 'Trạng thái đơn hàng: Đã hủy.');
+  assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: CANCELLED.'), 'Trạng thái đơn hàng: Đã hủy.');
 
-  // Mẫu cũ vận đơn GHN
+  // 2. Mẫu cũ vận đơn GHN (Nguồn: a310d78:core-backend/controllers/shipmentController.js:113)
   assert.equal(getNotificationBodyLabel('Đơn vận chuyển GHN: delivering.'), 'Đơn vận chuyển GHN: Đang phát hàng.');
-  assert.equal(getNotificationBodyLabel('GHN shipment update: ready_to_pick'), 'Đơn vận chuyển GHN: Chờ lấy hàng.');
+  assert.equal(getNotificationBodyLabel('Đơn vận chuyển GHN: ready_to_pick'), 'Đơn vận chuyển GHN: Chờ lấy hàng.');
   assert.equal(getNotificationBodyLabel('Đơn vận chuyển GHN: delivered.'), 'Đơn vận chuyển GHN: Giao thành công.');
 
-  // Mẫu cũ đổi trả
+  // 3. Mẫu cũ đổi trả (Nguồn: cfdfdb6:core-backend/controllers/adminController.js:485)
   assert.equal(getNotificationBodyLabel('Yêu cầu đổi trả: APPROVED.'), 'Yêu cầu đổi trả: Đã duyệt.');
   assert.equal(getNotificationBodyLabel('Yêu cầu đổi trả: REJECTED'), 'Yêu cầu đổi trả: Đã từ chối.');
 
@@ -272,6 +273,8 @@ test('getNotificationBodyLabel handles old DB notification bodies and translates
 test('All catalog tags in catalogTags.snapshot.json must exist in catalogOptions.js with valid Vietnamese labels', () => {
   const snapshotPath = path.join(__dirname, '../data/catalogTags.snapshot.json');
   const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+
+  assert.equal(snapshot._metadata?.source, 'core-backend/scripts/seedDemo.js', 'Nguồn snapshot phải ghi rõ là seedDemo.js');
 
   const optionsMap = {
     occasions: new Map(occasions),
@@ -297,5 +300,17 @@ test('All catalog tags in catalogTags.snapshot.json must exist in catalogOptions
       assert.ok(label && label.length > 0, `Tag "${tag}" must have a non-empty Vietnamese label`);
     }
   }
+});
+
+test('formatReasonLabel translates reason tag keys to Vietnamese and preserves fallbacks', () => {
+  assert.equal(formatReasonLabel('Đúng dịp birthday'), 'Đúng dịp Sinh nhật');
+  assert.equal(formatReasonLabel('Phù hợp người nhận partner'), 'Phù hợp người nhận Người yêu/bạn đời');
+  assert.equal(formatReasonLabel('Khớp sở thích flowers'), 'Khớp sở thích Hoa');
+  assert.equal(formatReasonLabel('Đúng phong cách minimal'), 'Đúng phong cách Tối giản');
+  assert.equal(formatReasonLabel('Đúng loại quà gift-box'), 'Đúng loại quà Hộp quà');
+  assert.equal(formatReasonLabel('Đúng dịp custom_tag'), 'Đúng dịp custom_tag');
+  assert.equal(formatReasonLabel('Phù hợp với bạn'), 'Phù hợp với bạn');
+  assert.equal(formatReasonLabel(''), '');
+  assert.equal(formatReasonLabel(null), '');
 });
 

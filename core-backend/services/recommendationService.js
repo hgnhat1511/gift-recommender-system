@@ -240,7 +240,7 @@ async function recommendProducts(userId, limit) {
 
     const items = ranked.slice(0, limit).map(({ product, reasons }) => ({
         product,
-        reasons: reasons.length ? reasons : ['S\u1ea3n ph\u1ea9m c\u00f2n h\u00e0ng trong catalog']
+        reasons: reasons.length ? reasons : ['Sản phẩm còn hàng trong danh mục']
     }));
     const pythonItems=await askMlService(ranked,profile,limit);
     return {

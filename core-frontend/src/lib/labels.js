@@ -277,8 +277,9 @@ export function getReviewApprovalLabel(isApproved) {
 export function getNotificationBodyLabel(body) {
   if (typeof body !== 'string' || !body) return '';
 
-  // 1. Mẫu trạng thái đơn hàng: "Trạng thái đơn hàng: <STATUS>." hoặc "Order status: <STATUS>."
-  const orderMatch = body.match(/^(?:Trạng thái đơn hàng|Order status):\s*([A-Za-z0-9_]+)\.?$/i);
+  // 1. Mẫu trạng thái đơn hàng cũ: "Trạng thái đơn hàng: <STATUS>."
+  // Nguồn lịch sử: cfdfdb6:core-backend/controllers/adminController.js:304
+  const orderMatch = body.match(/^Trạng thái đơn hàng:\s*([A-Za-z0-9_]+)\.?$/);
   if (orderMatch) {
     const rawStatus = orderMatch[1];
     const label = getOrderStatusLabel(rawStatus);
@@ -287,8 +288,9 @@ export function getNotificationBodyLabel(body) {
     }
   }
 
-  // 2. Mẫu vận chuyển GHN: "Đơn vận chuyển GHN: <STATUS>." hoặc "GHN shipment update: <STATUS>."
-  const shipmentMatch = body.match(/^(?:Đơn vận chuyển GHN|GHN shipment update):\s*([A-Za-z0-9_]+)\.?$/i);
+  // 2. Mẫu vận chuyển GHN cũ: "Đơn vận chuyển GHN: <STATUS>."
+  // Nguồn lịch sử: a310d78:core-backend/controllers/shipmentController.js:113
+  const shipmentMatch = body.match(/^Đơn vận chuyển GHN:\s*([A-Za-z0-9_]+)\.?$/);
   if (shipmentMatch) {
     const rawStatus = shipmentMatch[1];
     const label = getShipmentStatusLabel(rawStatus);
@@ -297,8 +299,9 @@ export function getNotificationBodyLabel(body) {
     }
   }
 
-  // 3. Mẫu đổi trả: "Yêu cầu đổi trả: <STATUS>."
-  const returnMatch = body.match(/^Yêu cầu đổi trả:\s*([A-Za-z0-9_]+)\.?$/i);
+  // 3. Mẫu đổi trả cũ: "Yêu cầu đổi trả: <STATUS>."
+  // Nguồn lịch sử: cfdfdb6:core-backend/controllers/adminController.js:485
+  const returnMatch = body.match(/^Yêu cầu đổi trả:\s*([A-Za-z0-9_]+)\.?$/);
   if (returnMatch) {
     const rawStatus = returnMatch[1];
     const label = getReturnStatusLabel(rawStatus);

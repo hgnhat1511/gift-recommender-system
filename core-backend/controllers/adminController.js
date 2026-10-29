@@ -1,6 +1,7 @@
 const pool=require('../config/db');
 const {orderView,getOrderData,restoreStock,releaseCoupon}=require('./orderController');
 const {getOrderStatusLabel}=require('../utils/orderStatusLabels');
+const {getReturnStatusLabel}=require('../utils/returnStatusLabels');
 
 const productColumns=`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p LEFT JOIN categories c ON c.id=p.category_id`;
 const allowedStatuses=['PENDING','CONFIRMED','PROCESSING','SHIPPED','DELIVERED','CANCELLED'];
@@ -485,7 +486,7 @@ async function updateReturn(req,res,next){
             }
         }
         await connection.execute('UPDATE return_requests SET status=?,admin_note=? WHERE id=?',[status,adminNote?.trim()||null,request.id]);
-        await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'RETURN','Cập nhật yêu cầu đổi trả',?,?)",[request.user_id,adminNote?.trim()||`Yêu cầu đổi trả: ${status}.`,request.order_id]);
+        await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'RETURN','Cập nhật yêu cầu đổi trả',?,?)",[request.user_id,adminNote?.trim()||`Yêu cầu đổi trả: ${getReturnStatusLabel(status)}.`,request.order_id]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'RETURN_DECISION','return',request.id,JSON.stringify({status,adminNote:adminNote||null,restocked:status==='COMPLETED'})]);
         await connection.commit();
         return res.json({success:true,data:{id:String(request.id),status,restocked:status==='COMPLETED',refundProcessed:false}});

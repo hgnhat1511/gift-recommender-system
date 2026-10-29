@@ -30,6 +30,7 @@ const rootDir = path.resolve(__dirname, '../../..');
 
 const scanDirs = [
   'core-frontend/src',
+  'core-frontend/scripts',
   'core-frontend/e2e',
   'core-frontend/fixtures',
   'core-backend/controllers',

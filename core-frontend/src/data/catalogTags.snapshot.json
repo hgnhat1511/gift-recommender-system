@@ -1,4 +1,9 @@
 {
+  "_metadata": {
+    "source": "core-backend/scripts/seedDemo.js",
+    "extractedAt": "2026-10-29",
+    "description": "Snapshot trích xuất các tag độc nhất từ seedDemo.js (đối soát với seedDemo.js, chưa xác minh với DB dev do MySQL chưa kết nối)"
+  },
   "occasions": [
     "anniversary",
     "birthday",

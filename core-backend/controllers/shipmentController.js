@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const ghn = require('../services/shipping/ghnProvider');
+const { getShipmentStatusLabel } = require('../utils/shipmentStatusLabels');
 
 function validPackage(body) {
     const values=['weightGrams','lengthCm','widthCm','heightCm'].map((key)=>Number(body?.[key]));
@@ -109,8 +110,8 @@ async function ghnWebhook(req,res,next) {
             if(nextStatus){
                 if(nextStatus==='DELIVERED'&&order.status==='PROCESSING')await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,\'PROCESSING\',\'SHIPPED\',\'Đơn vị vận chuyển đã lấy hàng\')',[order.id]);
                 await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[nextStatus,nextStatus,order.id]);
-                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,?,?)',[order.id,order.status,nextStatus,`Cập nhật vận đơn GHN: ${status}`]);
-                await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'SHIPPING',?,?,?)",[order.user_id,`Cập nhật đơn ${order.order_code}`,`Đơn vận chuyển GHN: ${status}.`,order.id]);
+                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,?,?)',[order.id,order.status,nextStatus,`Cập nhật vận đơn GHN: ${getShipmentStatusLabel(status)}`]);
+                await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'SHIPPING',?,?,?)",[order.user_id,`Cập nhật đơn ${order.order_code}`,`Đơn vận chuyển GHN: ${getShipmentStatusLabel(status)}.`,order.id]);
             }
         }
         await connection.commit();return res.json({success:true,accepted:true});
