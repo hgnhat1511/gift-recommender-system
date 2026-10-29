@@ -2,6 +2,12 @@ const pool = require('../config/db');
 const { present } = require('./catalogController');
 const { validateQuantity } = require('../utils/cartHelper');
 const { parseMergeBody } = require('../utils/cartMergeContract');
+const {
+    parseAddCartItemBody,
+    parseUpdateCartItemBody,
+    parseUpdateSelectionBody,
+    parseUpdateAllSelectionBody
+} = require('../utils/cartItemContract');
 
 const quantity = validateQuantity;
 
@@ -19,14 +25,15 @@ async function list(req, res, next) {
 }
 
 async function add(req, res, next) {
-    const qty = quantity(req.body?.quantity ?? 1);
-    if (!/^\d+$/.test(String(req.body?.productId || '')) || !qty) return res.status(400).json({ success:false,message:'Invalid product or quantity.' });
+    const parsed = parseAddCartItemBody(req.body);
+    if (!parsed.ok) return res.status(parsed.status).json({ success:false,message:parsed.message });
+    const { productId, quantity: qty } = parsed;
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [products] = await connection.execute("SELECT id,name,stock FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [req.body.productId]);
+        const [products] = await connection.execute("SELECT id,name,stock FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [productId]);
         if (!products[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Product not found or inactive.' }); }
-        const [items] = await connection.execute('SELECT quantity FROM cart_items WHERE user_id=? AND product_id=? FOR UPDATE', [req.user.id,req.body.productId]);
+        const [items] = await connection.execute('SELECT quantity FROM cart_items WHERE user_id=? AND product_id=? FOR UPDATE', [req.user.id,productId]);
         const inCart = Number(items[0]?.quantity || 0);
         const target = qty + inCart;
         if (target > Number(products[0].stock)) {
@@ -38,8 +45,8 @@ async function add(req, res, next) {
             });
         }
         await connection.execute(`INSERT INTO cart_items (user_id,product_id,quantity) VALUES (?,?,?)
-            ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),is_selected=TRUE`, [req.user.id,req.body.productId,target]);
-        await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'CART_ADD')", [req.user.id,req.body.productId]);
+            ON DUPLICATE KEY UPDATE quantity=VALUES(quantity),is_selected=TRUE`, [req.user.id,productId,target]);
+        await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'CART_ADD')", [req.user.id,productId]);
         await connection.commit();
         return res.status(201).json({ success:true,message:'Added to cart.' });
     } catch (error) { await connection.rollback(); return next(error); }
@@ -115,13 +122,14 @@ async function merge(req, res, next) {
 }
 
 async function update(req, res, next) {
-    const qty = quantity(req.body?.quantity);
-    if (!qty || !/^\d+$/.test(String(req.params.itemId))) return res.status(400).json({ success:false,message:'Invalid quantity.' });
+    const parsed = parseUpdateCartItemBody(req.params, req.body);
+    if (!parsed.ok) return res.status(parsed.status).json({ success:false,message:parsed.message });
+    const { itemId, quantity: qty } = parsed;
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         const [rows] = await connection.execute(`SELECT ci.id,p.id product_id,p.name,p.stock,p.status FROM cart_items ci JOIN products p ON p.id=ci.product_id
-            WHERE ci.id=? AND ci.user_id=? FOR UPDATE`, [req.params.itemId,req.user.id]);
+            WHERE ci.id=? AND ci.user_id=? FOR UPDATE`, [itemId,req.user.id]);
         if (!rows[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Cart item not found.' }); }
         if (rows[0].status !== 'ACTIVE' || qty > Number(rows[0].stock)) {
             await connection.rollback();
@@ -131,7 +139,7 @@ async function update(req, res, next) {
                 data: { productId: String(rows[0].product_id), name: rows[0].name, stock: Number(rows[0].stock), requested: qty }
             });
         }
-        await connection.execute('UPDATE cart_items SET quantity=? WHERE id=?', [qty,req.params.itemId]);
+        await connection.execute('UPDATE cart_items SET quantity=? WHERE id=?', [qty,itemId]);
         await connection.commit();
         return res.json({ success:true });
     } catch (error) { await connection.rollback(); return next(error); }
@@ -139,23 +147,27 @@ async function update(req, res, next) {
 }
 
 async function updateSelection(req,res,next){
-    if(!/^\d+$/.test(String(req.params.itemId||''))||typeof req.body?.isSelected!=='boolean')return res.status(400).json({success:false,message:'isSelected must be a boolean.'});
+    const parsed = parseUpdateSelectionBody(req.params, req.body);
+    if(!parsed.ok) return res.status(parsed.status).json({success:false,message:parsed.message});
+    const { itemId, isSelected } = parsed;
     const connection=await pool.getConnection();
     try{
         await connection.beginTransaction();
-        const [rows]=await connection.execute('SELECT id FROM cart_items WHERE id=? AND user_id=? FOR UPDATE',[req.params.itemId,req.user.id]);
+        const [rows]=await connection.execute('SELECT id FROM cart_items WHERE id=? AND user_id=? FOR UPDATE',[itemId,req.user.id]);
         if(!rows[0]){await connection.rollback();return res.status(404).json({success:false,message:'Cart item not found.'})}
-        await connection.execute('UPDATE cart_items SET is_selected=? WHERE id=?',[req.body.isSelected,req.params.itemId]);
+        await connection.execute('UPDATE cart_items SET is_selected=? WHERE id=?',[isSelected,itemId]);
         await connection.commit();
-        return res.json({success:true,data:{isSelected:req.body.isSelected}});
+        return res.json({success:true,data:{isSelected}});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
 
 async function updateAllSelection(req,res,next){
-    if(typeof req.body?.isSelected!=='boolean')return res.status(400).json({success:false,message:'isSelected must be a boolean.'});
+    const parsed = parseUpdateAllSelectionBody(req.body);
+    if(!parsed.ok) return res.status(parsed.status).json({success:false,message:parsed.message});
+    const { isSelected } = parsed;
     try{
-        await pool.execute('UPDATE cart_items SET is_selected=? WHERE user_id=?',[req.body.isSelected,req.user.id]);
-        return res.json({success:true,data:{isSelected:req.body.isSelected}});
+        await pool.execute('UPDATE cart_items SET is_selected=? WHERE user_id=?',[isSelected,req.user.id]);
+        return res.json({success:true,data:{isSelected}});
     }catch(error){return next(error)}
 }
 

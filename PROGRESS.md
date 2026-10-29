@@ -231,6 +231,61 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
   + Backend: Xử lý theo cơ chế thêm từng sản phẩm với `min(số lượng cũ, tồn còn lại − số đã có trong giỏ)`, dùng giá hiện tại từ bảng `products`, đánh dấu `is_selected = TRUE`, hỗ trợ mọi trạng thái đơn hàng của chính user, trả về danh sách chi tiết các món thêm thành công và các món bị bỏ qua do hết hàng/ngừng bán kèm lý do tiếng Việt.
   + Frontend: Gọi `emitCartChange()`, tự động chuyển hướng sang `/cart` kèm thông báo kết quả chi tiết; nếu không thêm được món nào thì hiển thị lỗi và ở lại trang.
 - Đã bổ sung thanh công cụ giỏ hàng: Chọn/bỏ chọn tất cả sản phẩm (`PATCH /cart/selection`), Xóa toàn bộ giỏ (`DELETE /cart`), ô nhập số lượng trực tiếp (giới hạn 1 đến 99 và không vượt tồn kho).
-- Đã tách helper kiểm tra giỏ hàng và reorder độc lập tại `core-backend/utils/cartHelper.js`. File unit test `core-backend/test/cart-inventory.test.js` import trực tiếp code thật từ helper/controller (không còn mock trùng tên).
-- Đã viết unit test chứng minh 7 kịch bản cập nhật badge giỏ hàng tại `core-frontend/src/context/CartBadge.test.js` (16/16 frontend unit tests pass).
-- Toàn bộ backend unit tests 20/20 pass (18 pass, 2 skip do TEST_DB_NAME), frontend lint 0 lỗi, build pass trong ~1.0s.
+- Đã tách helper kiểm tra giỏ hàng và reorder độc lập tại `core-backend/utils/cartHelper.js`. File unit test `core-backend/test/cart-inventory.test.js` import trực tiếp code thật từ helper/controller.
+- Đã viết unit test chứng minh 7 kịch bản cập nhật badge giỏ hàng tại `core-frontend/src/context/CartBadge.test.js`.
+
+### 2026-10-27 - Khu vực 1d: Chuẩn hóa hợp đồng dữ liệu giỏ hàng và gộp giỏ (Commit `815e91e`)
+- Sửa lỗi lệch khóa hợp đồng gộp giỏ giữa frontend (`key`) và backend (`mergeKey`), đồng nhất dùng `mergeKey`.
+- Tách parser thuần `cartMergeContract.js` và `cartItemContract.js` ở backend; tách builder thuần `cartPayloads.js` ở frontend.
+- Viết bộ unit test hợp đồng dữ liệu thuần: `core-backend/test/cart-merge-contract.test.js` (6 tests) và `core-backend/test/cart-items-contract.test.js` (9 tests).
+- Bổ sung test mã hóa UTF-8 toàn dự án tại `core-frontend/src/lib/encoding.test.js` (4 tests).
+
+### 2026-10-27 - Khu vực 2: Rà soát kho và lý do tiếng Việt (Commit `d32ef31`)
+- Rà soát các luồng biến động tồn kho: đặt hàng trừ kho nguyên tử, hủy đơn hoàn kho, hoàn tất đổi trả nhập kho, admin điều chỉnh kho.
+- Chuẩn hóa các lý do tiếng Việt trong `inventory_movements.reason` và `order_status_history.note`.
+- Bổ sung unit test `order-inventory-reasons.test.js` (7 tests).
+
+### 2026-10-28 - Khu vực 2b: Hoàn tác khách tự hủy đơn CONFIRMED (Commit `1c54a85`)
+- Hoàn tác hành vi nghiệp vụ khách tự hủy đơn CONFIRMED: khách hàng chỉ được tự hủy đơn ở trạng thái `PENDING` + `UNPAID`.
+- Giữ vững quy tắc: đơn `CONFIRMED` chỉ được hủy qua quản trị viên (Admin portal) để kiểm soát hàng hóa và hoàn tồn.
+
+### 2026-10-28 - Khu vực 2c: Chuẩn hóa nguồn chân lý hợp đồng (Commit `f8fab5c`)
+- Đồng bộ hóa hợp đồng đặt hàng checkout (`orderContract.js` và `order-contract.test.js`).
+- Đối chiếu các chuỗi lịch sử đơn hàng và biến động kho với baseline commit `cfdfdb6` và `a310d78`.
+
+### 2026-10-29 - Khu vực 2e: Tích hợp bộ phân tích giỏ hàng, đồng bộ nhãn đơn hàng và mở rộng kiểm tra mã hóa (Commit hiện tại)
+- **Chuẩn hóa controller dùng parser thật:** `cartController.js` đã import và áp dụng trực tiếp 4 parser từ `cartItemContract.js` (`parseAddCartItemBody`, `parseUpdateCartItemBody`, `parseUpdateSelectionBody`, `parseUpdateAllSelectionBody`) thay thế toàn bộ kiểm tra inline; `App.jsx:96` dùng `buildAddCartItemPayload(product.id, 1)` (toàn bộ frontend không còn body dựng tay).
+- **Đồng bộ nhãn trạng thái đơn hàng (1-1):** Tạo `core-backend/utils/orderStatusLabels.js` chứa đủ 6 trạng thái tiếng Việt, sửa `adminController.js:305` không nối status enum thô; thêm unit test `core-backend/test/order-status-sync.test.js` (2 tests) import code thật hai phía đảm bảo khớp 100% với `ORDER_STATUS` của frontend.
+- **Xử lý tiền tố vận đơn GHN:** Cập nhật `getOrderHistoryNoteLabel` trong `labels.js` nhận diện cả prefix cũ `GHN shipment update:` và mới `Cập nhật vận đơn GHN:`, chuyển mã qua `getShipmentStatusLabel`.
+- **Việt hóa giao diện:**
+  + Thay thế toàn bộ kicker và tiêu đề: `GIFTLY PICKS` -> `GỢI Ý TỪ GIFTLY`, `CATALOG GIFTLY` -> `DANH MỤC GIFTLY`, `catalog` -> `danh mục`, `Xem catalog` -> `Xem danh mục`, `GIFTLY GIFT FINDER` -> `TÌM QUÀ CÙNG GIFTLY`.
+  + Bổ sung từ điển nhãn tiếng Việt cho `styles` (phong cách) và `giftTypes` (loại quà) tại `core-frontend/src/data/catalogOptions.js`; `CatalogPages.jsx` hiển thị nhãn tiếng Việt cho khách hàng nhưng giữ nguyên giá trị `value` gửi lên API/DB là key kỹ thuật tiếng Anh gốc.
+  + Sửa placeholder gợi ý tag admin thành `vd: birthday, anniversary (khóa tiếng Anh)`.
+- **Nâng cấp kiểm thử toàn vẹn UTF-8 (`encoding.test.js`):**
+  + Bắt được `??` liền nhau (sửa `isLegitimateQuestion` không bỏ sót `??`, chỉ miễn trừ câu hỏi khi có đúng 1 dấu hỏi đơn đứng sau chữ cái/số kèm từ nghi vấn hợp lệ).
+  + Mở rộng phạm vi quét sang `.css`, `.json`, `.md`.
+  + Loại trừ `package-lock.json` (file khóa phụ thuộc npm chứa băm sha512 và URL) và `enums.snapshot.json` (snapshot kỹ thuật đối soát schema).
+  + Đã chứng minh ĐỎ / XANH bằng fixture tạm ngoài src chứa đủ 5 ca lỗi: `'lưu??'`, `'Kh?ng'`, `&#7907;`, `U+FFFD`, `'Đang lưu?'` (4/4 subtest UTF-8 fail khi có fixture, và 4/4 pass khi gỡ fixture).
+
+---
+
+## Trạng thái kiểm thử thực tế hiện tại
+- **Backend `npm.cmd test`:** **50 tests** (48 pass, 2 skipped an toàn do không có `TEST_DB_NAME`, 0 fail).
+- **Frontend `npm.cmd test`:** **21 tests** (21 pass, 0 fail).
+- **Playwright Mock (`npm.cmd run test:badge-mock`):** **7 tests pass** (100% network cô lập).
+- **Frontend lint (`npm.cmd run lint`):** 0 lỗi, 0 cảnh báo.
+- **Frontend build (`npm.cmd run build`):** thành công (0 lỗi).
+
+---
+
+## Việc còn lại / Chưa làm (Chờ người dùng phê duyệt & quyết định sau)
+> **Lưu ý:** Các mục dưới đây được ghi nhận rõ ràng là **CHƯA LÀM**, tuyệt đối không tự ý triển khai:
+1. **Chưa làm 2a (E1–E4):**
+   - Trạng thái ban đầu COD (`CONFIRMED`) / VNPAY (`PENDING`).
+   - Xử lý VNPAY IPN callback thành công chuyển trạng thái đơn sang `CONFIRMED`.
+   - Chặn admin chuyển trạng thái sai quy trình (ví dụ: chuyển từ PENDING khi chưa thanh toán).
+   - Luật hủy đơn hàng mở rộng của khách hàng và quản trị viên.
+2. **Chưa làm 2d:** Chuẩn hóa mã lỗi `code` ổn định và Việt hóa toàn diện message trả về từ backend API (hiện tại giữ nguyên mã HTTP và chuỗi message gốc).
+3. **Chưa làm:** Cơ chế gộp giỏ khách vãng lai (`POST /cart/merge`) không idempotent nếu người dùng gửi nhiều `mergeKey` khác nhau cho cùng một danh sách sản phẩm.
+4. **Chưa làm:** Khi hủy đơn hàng, hệ thống chưa tự động đóng hoặc hủy các bản ghi liên kết trong bảng `payment_attempts` (VNPAY) và `shipments` (GHN).
+5. **Chưa làm:** Dữ liệu cũ bằng tiếng Anh đã lưu trong database từ trước (ví dụ chuỗi trong cột `notifications.body` hoặc ghi chú tùy biến cũ trong `order_status_history.note`) vẫn hiển thị thô trên giao diện của người dùng cũ (frontend hiển thị trực tiếp `n.body`).

@@ -182,6 +182,9 @@ test('Additional domain labels (coupon discount type, payment attempts, notifica
     { raw: 'Shipment collected by carrier', expected: 'Đơn vị vận chuyển đã lấy hàng', source: 'shipmentController.js:110 (a310d78)' },
     { raw: 'GHN shipment update: ready_to_pick', expected: 'Cập nhật vận đơn GHN: Chờ lấy hàng', source: 'shipmentController.js:112 (a310d78)' },
     { raw: 'GHN shipment update: delivering', expected: 'Cập nhật vận đơn GHN: Đang phát hàng', source: 'shipmentController.js:112 (a310d78)' },
+    { raw: 'GHN shipment update: IN_TRANSIT', expected: 'Cập nhật vận đơn GHN: Đang trung chuyển', source: 'shipmentController.js:112 (legacy prefix)' },
+    { raw: 'Cập nhật vận đơn GHN: IN_TRANSIT', expected: 'Cập nhật vận đơn GHN: Đang trung chuyển', source: 'shipmentController.js:112 (vietnamese prefix)' },
+    { raw: 'Cập nhật vận đơn GHN: DELIVERED', expected: 'Cập nhật vận đơn GHN: Giao thành công', source: 'shipmentController.js:112 (vietnamese prefix)' },
   ];
   for (const item of BASELINE_ORDER_NOTES) {
     assert.equal(getOrderHistoryNoteLabel(item.raw), item.expected, `Ghi chú lịch sử "${item.raw}" từ ${item.source} phải dịch đúng`);

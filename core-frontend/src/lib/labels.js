@@ -154,10 +154,16 @@ export const ORDER_HISTORY_NOTES = Object.freeze({
 export function getOrderHistoryNoteLabel(note) {
   if (!note) return '';
   if (ORDER_HISTORY_NOTES[note]) return ORDER_HISTORY_NOTES[note];
-  // Xử lý ghi chú webhook GHN cũ: GHN shipment update: <status>
-  if (typeof note === 'string' && note.startsWith('GHN shipment update: ')) {
-    const rawStatus = note.slice('GHN shipment update: '.length).trim();
-    return `Cập nhật vận đơn GHN: ${getShipmentStatusLabel(rawStatus)}`;
+  if (typeof note === 'string') {
+    // Xử lý ghi chú webhook GHN (cả tiền tố cũ và mới)
+    if (note.startsWith('GHN shipment update: ')) {
+      const rawStatus = note.slice('GHN shipment update: '.length).trim();
+      return `Cập nhật vận đơn GHN: ${getShipmentStatusLabel(rawStatus)}`;
+    }
+    if (note.startsWith('Cập nhật vận đơn GHN: ')) {
+      const rawStatus = note.slice('Cập nhật vận đơn GHN: '.length).trim();
+      return `Cập nhật vận đơn GHN: ${getShipmentStatusLabel(rawStatus)}`;
+    }
   }
   return note;
 }

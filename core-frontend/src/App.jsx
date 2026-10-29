@@ -24,6 +24,7 @@ import api, { getAuth, getApiError } from './lib/api.js';
 import { ProductCard } from './pages/store/CatalogPages.jsx';
 import { addGuestCartItem } from './lib/guestCart.js';
 import { useCart, emitCartChange } from './context/CartContext.jsx';
+import { buildAddCartItemPayload } from './lib/cartPayloads.js';
 
 const categoryIcons = [Cake, Heart, Flower2, Gift, Coffee, Sparkles];
 const categoryColors = ['pink', 'rose', 'green', 'purple', 'orange', 'blue'];
@@ -93,7 +94,7 @@ function App() {
       return;
     }
     try {
-      await api.post('/cart/items', { productId: product.id, quantity: 1 });
+      await api.post('/cart/items', buildAddCartItemPayload(product.id, 1));
       emitCartChange();
       setNotice(`Đã thêm “${product.name}” vào giỏ hàng.`);
     } catch (error) { setNotice(getApiError(error, 'Không thể thêm sản phẩm vào giỏ hàng.')); }
@@ -215,11 +216,11 @@ function App() {
         {recommendations.items?.length > 0 && <section className="section products-section recommendation-section" id="recommendations">
           <div className="section-heading">
             <div>
-              <span className="section-kicker">GIFTLY PICKS</span>
+              <span className="section-kicker">GỢI Ý TỪ GIFTLY</span>
               <h2>{recommendations.method === 'personalized_activity' ? <>Gợi ý riêng cho <span>bạn</span></> : <>Món quà đang được yêu thích</>}</h2>
               <p>{recommendations.method === 'personalized_activity'
                 ? 'Phân tích lượt xem, sở thích và tương tác gần đây của tài khoản.'
-                : 'Những sản phẩm còn hàng trong catalog Giftly.'}</p>
+                : 'Những sản phẩm còn hàng trong danh mục Giftly.'}</p>
             </div>
             <Link to="/products" className="text-link">Xem thêm <ArrowRight size={17} /></Link>
           </div>
@@ -367,12 +368,12 @@ function App() {
         </section>
 
         {newProducts.length > 0 && <section className="section products-section" id="new-products">
-          <div className="section-heading"><div><span className="section-kicker">CATALOG GIFTLY</span><h2>Sản phẩm <span>mới nhất</span></h2><p>Các sản phẩm mới được cập nhật trong catalog.</p></div><Link to="/products?sort=newest" className="text-link">Xem tất cả <ArrowRight size={17}/></Link></div>
+          <div className="section-heading"><div><span className="section-kicker">DANH MỤC GIFTLY</span><h2>Sản phẩm <span>mới nhất</span></h2><p>Các sản phẩm mới được cập nhật trong danh mục.</p></div><Link to="/products?sort=newest" className="text-link">Xem tất cả <ArrowRight size={17}/></Link></div>
           <div className="commerce-product-grid home-catalog-grid">{newProducts.map(product=><ProductCard key={product.id} product={product} onChange={setNotice}/>)}</div>
         </section>}
 
         {popularProducts.length > 0 && <section className="section products-section" id="popular-products">
-          <div className="section-heading"><div><span className="section-kicker">NỔI BẬT</span><h2>Được ưu tiên trong <span>catalog</span></h2><p>Sản phẩm nổi bật và mức tương tác gần đây được tính từ dữ liệu thật.</p></div><Link to="/products?sort=popular" className="text-link">Khám phá thêm <ArrowRight size={17}/></Link></div>
+          <div className="section-heading"><div><span className="section-kicker">NỔI BẬT</span><h2>Được ưu tiên trong <span>danh mục</span></h2><p>Sản phẩm nổi bật và mức tương tác gần đây được tính từ dữ liệu thật.</p></div><Link to="/products?sort=popular" className="text-link">Khám phá thêm <ArrowRight size={17}/></Link></div>
           <div className="commerce-product-grid home-catalog-grid">{popularProducts.map(product=><ProductCard key={product.id} product={product} onChange={setNotice}/>)}</div>
         </section>}
 
@@ -443,7 +444,7 @@ function App() {
             <h4>Hỗ trợ</h4>
             <Link to="/orders">Theo dõi đơn hàng</Link>
             <Link to="/account#addresses">Quản lý địa chỉ</Link>
-            <Link to="/products">Xem catalog</Link>
+            <Link to="/products">Xem danh mục</Link>
           </div>
           <div className="footer-column">
             <h4>Luôn có điều bất ngờ</h4>

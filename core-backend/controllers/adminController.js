@@ -1,5 +1,6 @@
 const pool=require('../config/db');
 const {orderView,getOrderData,restoreStock,releaseCoupon}=require('./orderController');
+const {getOrderStatusLabel}=require('../utils/orderStatusLabels');
 
 const productColumns=`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p LEFT JOIN categories c ON c.id=p.category_id`;
 const allowedStatuses=['PENDING','CONFIRMED','PROCESSING','SHIPPED','DELIVERED','CANCELLED'];
@@ -302,7 +303,7 @@ async function updateOrderStatus(req,res,next){
         if(status==='CANCELLED'){await restoreStock(connection,order.id,req.user.id);await releaseCoupon(connection,order.id)}
         await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[status,status,order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Quản trị viên cập nhật trạng thái']);
-        await connection.execute('INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (? ,\'ORDER\',?,?,?)',[order.user_id,`Cập nhật đơn ${order.order_code}`,`Trạng thái đơn hàng: ${status}.`,order.id]);
+        await connection.execute('INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (? ,\'ORDER\',?,?,?)',[order.user_id,`Cập nhật đơn ${order.order_code}`,`Trạng thái đơn hàng: ${getOrderStatusLabel(status)}.`,order.id]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'ORDER_STATUS','order',order.id,JSON.stringify({from:order.status,to:status,note:note||null})]);
         await connection.commit();return res.json({success:true,data:{orderCode:order.order_code,status,paymentStatus:status==='DELIVERED'&&order.payment_method==='COD'?'PAID':order.payment_status}});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
