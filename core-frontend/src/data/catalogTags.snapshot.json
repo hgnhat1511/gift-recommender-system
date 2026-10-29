@@ -1,0 +1,61 @@
+{
+  "occasions": [
+    "anniversary",
+    "birthday",
+    "graduation",
+    "housewarming",
+    "promotion",
+    "thank-you",
+    "valentines"
+  ],
+  "recipients": [
+    "child",
+    "coffee-lover",
+    "colleague",
+    "friend",
+    "husband",
+    "manager",
+    "mother",
+    "partner",
+    "sister",
+    "student",
+    "teacher",
+    "wife"
+  ],
+  "interests": [
+    "art",
+    "coffee",
+    "craft",
+    "decor",
+    "flowers",
+    "fragrance",
+    "gardening",
+    "home",
+    "outdoors",
+    "plants",
+    "stationery",
+    "sweets"
+  ],
+  "styles": [
+    "classic",
+    "handmade",
+    "minimal",
+    "natural",
+    "pastel",
+    "playful",
+    "romantic",
+    "sweet"
+  ],
+  "giftTypes": [
+    "accessory",
+    "card",
+    "daily-use",
+    "flowers",
+    "food",
+    "gift-box",
+    "home",
+    "kitchen",
+    "plant",
+    "stationery"
+  ]
+}

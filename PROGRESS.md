@@ -253,7 +253,7 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 - Đồng bộ hóa hợp đồng đặt hàng checkout (`orderContract.js` và `order-contract.test.js`).
 - Đối chiếu các chuỗi lịch sử đơn hàng và biến động kho với baseline commit `cfdfdb6` và `a310d78`.
 
-### 2026-10-29 - Khu vực 2e: Tích hợp bộ phân tích giỏ hàng, đồng bộ nhãn đơn hàng và mở rộng kiểm tra mã hóa (Commit hiện tại)
+### 2026-10-29 - Khu vực 2e: Tích hợp bộ phân tích giỏ hàng, đồng bộ nhãn đơn hàng và mở rộng kiểm tra mã hóa (Commit `ebb1ccf`)
 - **Chuẩn hóa controller dùng parser thật:** `cartController.js` đã import và áp dụng trực tiếp 4 parser từ `cartItemContract.js` (`parseAddCartItemBody`, `parseUpdateCartItemBody`, `parseUpdateSelectionBody`, `parseUpdateAllSelectionBody`) thay thế toàn bộ kiểm tra inline; `App.jsx:96` dùng `buildAddCartItemPayload(product.id, 1)` (toàn bộ frontend không còn body dựng tay).
 - **Đồng bộ nhãn trạng thái đơn hàng (1-1):** Tạo `core-backend/utils/orderStatusLabels.js` chứa đủ 6 trạng thái tiếng Việt, sửa `adminController.js:305` không nối status enum thô; thêm unit test `core-backend/test/order-status-sync.test.js` (2 tests) import code thật hai phía đảm bảo khớp 100% với `ORDER_STATUS` của frontend.
 - **Xử lý tiền tố vận đơn GHN:** Cập nhật `getOrderHistoryNoteLabel` trong `labels.js` nhận diện cả prefix cũ `GHN shipment update:` và mới `Cập nhật vận đơn GHN:`, chuyển mã qua `getShipmentStatusLabel`.
@@ -267,11 +267,32 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
   + Loại trừ `package-lock.json` (file khóa phụ thuộc npm chứa băm sha512 và URL) và `enums.snapshot.json` (snapshot kỹ thuật đối soát schema).
   + Đã chứng minh ĐỎ / XANH bằng fixture tạm ngoài src chứa đủ 5 ca lỗi: `'lưu??'`, `'Kh?ng'`, `&#7907;`, `U+FFFD`, `'Đang lưu?'` (4/4 subtest UTF-8 fail khi có fixture, và 4/4 pass khi gỡ fixture).
 
+### 2026-10-29 - Khu vực 2f: Kiểm thử bộ điều khiển giỏ hàng, việt hóa danh mục, thông báo cũ và đồng bộ nhãn thẻ (Commit hiện tại)
+- **Kiểm tra lịch sử commit `cfdfdb6` đã đẩy lên remote:** Quét toàn bộ repo tại mốc `cfdfdb6` bằng git grep và regex giá trị: không chứa credentials trong URL remote, không chứa private key, không chứa credential thật, không chứa token, không chứa file dump SQL/uploads/.env.
+- **Kiểm thử in-memory cho 4 handler của `cartController.js`:** Bổ sung test suite in-memory trong `core-backend/test/cart-items-contract.test.js` (5 tests) kiểm thử trực tiếp controller `add`, `update`, `updateSelection`, `updateAllSelection` từ chối input lỗi và trả HTTP 400 trước khi chạm pool kết nối database; nâng mức độ xác minh lên "đã xác minh bằng test".
+- **Script quét từ tiếng Anh giao diện (`scan:ui`):** Tạo `core-frontend/scripts/scan-english-ui.mjs` tích hợp lệnh `npm run scan:ui`. Script quét toàn diện JSX text, thuộc tính mô tả/tiêu đề và thông báo lỗi; tự động lọc bỏ cú pháp ternary inline (`? :`) và whitelist các từ mượn thương hiệu/kỹ thuật có giải trình (`Giftly`, `Gift Finder`, `Email`, `VNPAY`, `GHN`, `COD`).
+- **Việt hóa triệt để chữ "catalog" và tiếng Anh giao diện:**
+  + `App.jsx`: `'Không tải được danh mục sản phẩm.'`, `'Sản phẩm đang bán tại cửa hàng'`, `'Danh mục sẽ hiển thị sau khi sản phẩm được nạp.'`, `'Giải thích tiêu chí khớp với sản phẩm gợi ý'`.
+  + `StoreLayout.jsx`: `'Gợi ý quà dựa trên thuộc tính sản phẩm. ...'`.
+  + `AdminPages.jsx`: `'Tình hình hoạt động từ đơn hàng và danh mục sản phẩm trong database.'`, `<h2>Danh sách sản phẩm</h2>`, placeholder `'vd: birthday, anniversary (phân tách dấu phẩy)'`.
+  + `CouponAdminPage.jsx`: `'Hệ thống xác minh thời hạn, phạm vi danh mục, giá trị đơn và hạn mức khi thanh toán.'`.
+  + `CatalogPages.jsx`: `'Kết quả được tính theo tiêu chí quà tặng phù hợp.'`.
+  + Kết quả chạy `npm run scan:ui`: 17/17 file giao diện frontend đạt chuẩn 100% tiếng Việt sạch.
+- **Đồng bộ nhãn thẻ danh mục (`catalogOptions.js` & `catalogTags.snapshot.json`):**
+  + Bổ sung 4 nhãn tiếng Việt còn thiếu từ database seed (`wife` -> "Vợ", `husband` -> "Chồng", `coffee-lover` -> "Người yêu cà phê" vào `recipients`; `decor` -> "Đồ trang trí" vào `interests`).
+  + Tạo snapshot `core-frontend/src/data/catalogTags.snapshot.json` lưu trữ độc lập các tag từ database.
+  + Thêm test tự động trong `labels.test.js` đảm bảo 100% tag trong snapshot đều có nhãn tiếng Việt hợp lệ.
+- **Dịch thông báo cũ từ database (`getNotificationBodyLabel`):**
+  + Viết hàm `getNotificationBodyLabel(body)` trong `labels.js` nhận diện các mẫu thông báo enum cũ trong DB (`Trạng thái đơn hàng: <ENUM>.`, `Order status: <ENUM>.`, `Đơn vận chuyển GHN: <MÃ>.`, `GHN shipment update: <MÃ>.`, `Yêu cầu đổi trả: <ENUM>.`), dịch qua hàm nhãn tương ứng sang tiếng Việt chuẩn; giữ nguyên chuỗi mới tiếng Việt hoặc chuỗi tùy biến.
+  + Áp dụng tại `AccountPages.jsx:31` (`<p>{getNotificationBodyLabel(n.body)}</p>`).
+  + Bổ sung unit test trong `labels.test.js` cho tất cả các mẫu thông báo cũ và mới.
+
 ---
 
 ## Trạng thái kiểm thử thực tế hiện tại
-- **Backend `npm.cmd test`:** **50 tests** (48 pass, 2 skipped an toàn do không có `TEST_DB_NAME`, 0 fail).
-- **Frontend `npm.cmd test`:** **21 tests** (21 pass, 0 fail).
+- **Backend `npm.cmd test`:** **55 tests** (53 pass, 2 skipped an toàn do không có `TEST_DB_NAME`, 0 fail).
+- **Frontend `npm.cmd test`:** **23 tests** (23 pass, 0 fail).
+- **Frontend `npm.cmd run scan:ui`:** 17/17 file giao diện đạt chuẩn 100% tiếng Việt sạch (0 lỗi).
 - **Playwright Mock (`npm.cmd run test:badge-mock`):** **7 tests pass** (100% network cô lập).
 - **Frontend lint (`npm.cmd run lint`):** 0 lỗi, 0 cảnh báo.
 - **Frontend build (`npm.cmd run build`):** thành công (0 lỗi).
@@ -288,4 +309,4 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 2. **Chưa làm 2d:** Chuẩn hóa mã lỗi `code` ổn định và Việt hóa toàn diện message trả về từ backend API (hiện tại giữ nguyên mã HTTP và chuỗi message gốc).
 3. **Chưa làm:** Cơ chế gộp giỏ khách vãng lai (`POST /cart/merge`) không idempotent nếu người dùng gửi nhiều `mergeKey` khác nhau cho cùng một danh sách sản phẩm.
 4. **Chưa làm:** Khi hủy đơn hàng, hệ thống chưa tự động đóng hoặc hủy các bản ghi liên kết trong bảng `payment_attempts` (VNPAY) và `shipments` (GHN).
-5. **Chưa làm:** Dữ liệu cũ bằng tiếng Anh đã lưu trong database từ trước (ví dụ chuỗi trong cột `notifications.body` hoặc ghi chú tùy biến cũ trong `order_status_history.note`) vẫn hiển thị thô trên giao diện của người dùng cũ (frontend hiển thị trực tiếp `n.body`).
+5. **Chưa làm:** Ghi chú tùy biến tự do cũ trong `order_status_history.note` nếu do admin gõ tay bằng tiếng Anh trước đây vẫn hiển thị nguyên bản theo lịch sử.

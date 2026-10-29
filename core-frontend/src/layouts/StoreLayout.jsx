@@ -43,7 +43,7 @@ export function StoreLayout(){
       <Outlet />
       <footer className="store-layout-footer">
         <Link to="/">Giftly</Link>
-        <span>Gợi ý quà dựa trên thuộc tính catalog. Thanh toán và giao hàng trực tuyến phụ thuộc cấu hình dịch vụ của cửa hàng.</span>
+        <span>Gợi ý quà dựa trên thuộc tính sản phẩm. Thanh toán và giao hàng trực tuyến phụ thuộc cấu hình dịch vụ của cửa hàng.</span>
       </footer>
     </div>
   );

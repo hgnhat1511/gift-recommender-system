@@ -35,7 +35,15 @@ import {
   getInventoryReasonLabel,
   getReviewApprovalLabel,
   getOrderHistoryNoteLabel,
+  getNotificationBodyLabel,
 } from './labels.js';
+import {
+  occasions,
+  recipients,
+  interests,
+  styles,
+  giftTypes,
+} from '../data/catalogOptions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -235,6 +243,58 @@ test('All enum values in enums.snapshot.json must have non-empty Vietnamese labe
       if (val !== 'VNPAY') {
         assert.notEqual(label, val, `Enum value ${key}="${val}" must not equal raw key`);
       }
+    }
+  }
+});
+
+test('getNotificationBodyLabel handles old DB notification bodies and translates enums to Vietnamese', () => {
+  // Mẫu cũ trạng thái đơn hàng
+  assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: PROCESSING.'), 'Trạng thái đơn hàng: Đang chuẩn bị hàng.');
+  assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: CONFIRMED'), 'Trạng thái đơn hàng: Đã xác nhận.');
+  assert.equal(getNotificationBodyLabel('Order status: CANCELLED.'), 'Trạng thái đơn hàng: Đã hủy.');
+
+  // Mẫu cũ vận đơn GHN
+  assert.equal(getNotificationBodyLabel('Đơn vận chuyển GHN: delivering.'), 'Đơn vận chuyển GHN: Đang phát hàng.');
+  assert.equal(getNotificationBodyLabel('GHN shipment update: ready_to_pick'), 'Đơn vận chuyển GHN: Chờ lấy hàng.');
+  assert.equal(getNotificationBodyLabel('Đơn vận chuyển GHN: delivered.'), 'Đơn vận chuyển GHN: Giao thành công.');
+
+  // Mẫu cũ đổi trả
+  assert.equal(getNotificationBodyLabel('Yêu cầu đổi trả: APPROVED.'), 'Yêu cầu đổi trả: Đã duyệt.');
+  assert.equal(getNotificationBodyLabel('Yêu cầu đổi trả: REJECTED'), 'Yêu cầu đổi trả: Đã từ chối.');
+
+  // Mẫu mới tiếng Việt và chuỗi tùy biến giữ nguyên
+  assert.equal(getNotificationBodyLabel('Trạng thái đơn hàng: Đang chuẩn bị hàng.'), 'Trạng thái đơn hàng: Đang chuẩn bị hàng.');
+  assert.equal(getNotificationBodyLabel('Thanh toán đơn #1002 thành công.'), 'Thanh toán đơn #1002 thành công.');
+  assert.equal(getNotificationBodyLabel(''), '');
+  assert.equal(getNotificationBodyLabel(null), '');
+});
+
+test('All catalog tags in catalogTags.snapshot.json must exist in catalogOptions.js with valid Vietnamese labels', () => {
+  const snapshotPath = path.join(__dirname, '../data/catalogTags.snapshot.json');
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+
+  const optionsMap = {
+    occasions: new Map(occasions),
+    recipients: new Map(recipients),
+    interests: new Map(interests),
+    styles: new Map(styles),
+    giftTypes: new Map(giftTypes),
+  };
+
+  for (const [groupName, map] of Object.entries(optionsMap)) {
+    // 1. Kiểm tra cấu trúc tuple [key, label]
+    for (const [key, label] of map.entries()) {
+      assert.ok(typeof key === 'string' && key.length > 0, `Tag key in ${groupName} must be non-empty string`);
+      assert.ok(typeof label === 'string' && label.length > 0, `Tag label for "${key}" in ${groupName} must be non-empty`);
+      assert.notEqual(key, label, `Tag label for "${key}" in ${groupName} must not equal raw key`);
+    }
+
+    // 2. Kiểm tra toàn bộ tag trong snapshot có đủ nhãn
+    const expectedTags = snapshot[groupName] || [];
+    for (const tag of expectedTags) {
+      assert.ok(map.has(tag), `Tag "${tag}" from snapshot must exist in catalogOptions.${groupName}`);
+      const label = map.get(tag);
+      assert.ok(label && label.length > 0, `Tag "${tag}" must have a non-empty Vietnamese label`);
     }
   }
 });

@@ -18,6 +18,22 @@ const {
   parseUpdateSelectionBody,
   parseUpdateAllSelectionBody
 } = require('../utils/cartItemContract');
+const cartController = require('../controllers/cartController');
+
+function createMockRes() {
+  return {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(data) {
+      this.body = data;
+      return this;
+    }
+  };
+}
 
 let frontend;
 
@@ -104,6 +120,43 @@ describe('Contract: Cart Endpoints (POST /cart/items, PATCH /cart/items/:id, PAT
     test('2. Từ chối isSelected không phải boolean', () => {
       assert.equal(parseUpdateAllSelectionBody({ isSelected: 'false' }).ok, false);
       assert.equal(parseUpdateAllSelectionBody({}).ok, false);
+    });
+  });
+
+  describe('In-memory Handlers: cartController (add, update, updateSelection, updateAllSelection)', () => {
+    test('1. cartController.add từ chối productId không phải số', async () => {
+      const res = createMockRes();
+      await cartController.add({ body: { productId: 'invalid', quantity: 1 } }, res);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.body, { success: false, message: 'Invalid product or quantity.' });
+    });
+
+    test('2. cartController.add từ chối quantity <= 0 hoặc > 99', async () => {
+      const res = createMockRes();
+      await cartController.add({ body: { productId: '10', quantity: 0 } }, res);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.body, { success: false, message: 'Invalid product or quantity.' });
+    });
+
+    test('3. cartController.update từ chối itemId không phải số hoặc quantity sai chuẩn', async () => {
+      const res = createMockRes();
+      await cartController.update({ params: { itemId: 'abc' }, body: { quantity: 1 } }, res);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.body, { success: false, message: 'Invalid quantity.' });
+    });
+
+    test('4. cartController.updateSelection từ chối isSelected không phải boolean', async () => {
+      const res = createMockRes();
+      await cartController.updateSelection({ params: { itemId: '1' }, body: { isSelected: 'not-bool' } }, res);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.body, { success: false, message: 'isSelected must be a boolean.' });
+    });
+
+    test('5. cartController.updateAllSelection từ chối isSelected không phải boolean', async () => {
+      const res = createMockRes();
+      await cartController.updateAllSelection({ body: { isSelected: 'yes' } }, res);
+      assert.equal(res.statusCode, 400);
+      assert.deepEqual(res.body, { success: false, message: 'isSelected must be a boolean.' });
     });
   });
 });

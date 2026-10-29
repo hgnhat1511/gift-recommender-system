@@ -71,7 +71,7 @@ function App() {
         setPopularProducts(popularResponse.data.data.items);
         setProductCount(newestResponse.data.data.pagination.total);
       })
-      .catch((error) => setProductsError(getApiError(error, 'Không tải được catalog.')))
+      .catch((error) => setProductsError(getApiError(error, 'Không tải được danh mục sản phẩm.')))
       .finally(() => setProductsLoading(false));
     if (getAuth()?.token) {
       api.get('/account/favorites').then(({ data }) => setFavorites(data.data.map((product) => product.id))).catch(() => {});
@@ -177,7 +177,7 @@ function App() {
               <Link className="secondary-button" to="/gift-finder"><Sparkles size={17} /> Tìm quà phù hợp</Link>
             </div>
 
-            <div className="hero-proof"><Package size={20}/><div><strong>{productCount || '—'} sản phẩm</strong><p>Từ catalog đang hoạt động</p></div></div>
+            <div className="hero-proof"><Package size={20}/><div><strong>{productCount || '—'} sản phẩm</strong><p>Sản phẩm đang bán tại cửa hàng</p></div></div>
           </div>
 
           <div className="hero-visual">
@@ -283,7 +283,7 @@ function App() {
                 </Link>
               );
             })}
-            {categories.length === 0 && <p>Danh mục sẽ hiển thị sau khi catalog được nạp.</p>}
+            {categories.length === 0 && <p>Danh mục sẽ hiển thị sau khi sản phẩm được nạp.</p>}
           </div>
         </section>
 
@@ -399,7 +399,7 @@ function App() {
             <ul className="ai-check-list">
               <li><span>✓</span> Chọn theo người nhận và sở thích</li>
               <li><span>✓</span> Phù hợp dịp tặng và ngân sách</li>
-              <li><span>✓</span> Giải thích tiêu chí khớp với catalog</li>
+              <li><span>✓</span> Giải thích tiêu chí khớp với sản phẩm gợi ý</li>
             </ul>
             <button
               className="primary-button"

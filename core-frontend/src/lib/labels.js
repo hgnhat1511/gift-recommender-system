@@ -274,3 +274,40 @@ export function getReviewApprovalLabel(isApproved) {
   return lookup(REVIEW_APPROVAL_STATUS, isApproved, 'review_approval_status');
 }
 
+export function getNotificationBodyLabel(body) {
+  if (typeof body !== 'string' || !body) return '';
+
+  // 1. Mẫu trạng thái đơn hàng: "Trạng thái đơn hàng: <STATUS>." hoặc "Order status: <STATUS>."
+  const orderMatch = body.match(/^(?:Trạng thái đơn hàng|Order status):\s*([A-Za-z0-9_]+)\.?$/i);
+  if (orderMatch) {
+    const rawStatus = orderMatch[1];
+    const label = getOrderStatusLabel(rawStatus);
+    if (label && label !== rawStatus) {
+      return `Trạng thái đơn hàng: ${label}.`;
+    }
+  }
+
+  // 2. Mẫu vận chuyển GHN: "Đơn vận chuyển GHN: <STATUS>." hoặc "GHN shipment update: <STATUS>."
+  const shipmentMatch = body.match(/^(?:Đơn vận chuyển GHN|GHN shipment update):\s*([A-Za-z0-9_]+)\.?$/i);
+  if (shipmentMatch) {
+    const rawStatus = shipmentMatch[1];
+    const label = getShipmentStatusLabel(rawStatus);
+    if (label && label !== rawStatus) {
+      return `Đơn vận chuyển GHN: ${label}.`;
+    }
+  }
+
+  // 3. Mẫu đổi trả: "Yêu cầu đổi trả: <STATUS>."
+  const returnMatch = body.match(/^Yêu cầu đổi trả:\s*([A-Za-z0-9_]+)\.?$/i);
+  if (returnMatch) {
+    const rawStatus = returnMatch[1];
+    const label = getReturnStatusLabel(rawStatus);
+    if (label && label !== rawStatus) {
+      return `Yêu cầu đổi trả: ${label}.`;
+    }
+  }
+
+  // Mẫu mới / chuỗi tiếng Việt đã dịch / chuỗi khác: giữ nguyên
+  return body;
+}
+
