@@ -300,8 +300,16 @@ async function updateOrderStatus(req,res,next){
         const [rows]=await connection.execute('SELECT * FROM orders WHERE id=? FOR UPDATE',[req.params.id]);
         const order=rows[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
         if(!transitions[order.status].includes(status)){await connection.rollback();return res.status(409).json({success:false,message:`Order cannot move from ${order.status} to ${status}.`})}
+        if(order.payment_method==='VNPAY'&&order.payment_status!=='PAID'&&['CONFIRMED','PROCESSING'].includes(status)){
+            await connection.rollback();
+            return res.status(409).json({success:false,message:'Đơn hàng VNPAY chưa thanh toán (PAID), không thể chuyển sang trạng thái xác nhận hoặc chuẩn bị hàng.'});
+        }
         if(status==='CANCELLED'&&order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Paid orders cannot be cancelled until a refund workflow is available.'})}
-        if(status==='CANCELLED'){await restoreStock(connection,order.id,req.user.id);await releaseCoupon(connection,order.id)}
+        if(status==='CANCELLED'){
+            await restoreStock(connection,order.id,req.user.id);
+            await releaseCoupon(connection,order.id);
+            await connection.execute("UPDATE payment_attempts SET status='EXPIRED' WHERE order_id=? AND status='PENDING'",[order.id]);
+        }
         await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[status,status,order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Quản trị viên cập nhật trạng thái']);
         await connection.execute('INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (? ,\'ORDER\',?,?,?)',[order.user_id,`Cập nhật đơn ${order.order_code}`,`Trạng thái đơn hàng: ${getOrderStatusLabel(status)}.`,order.id]);

@@ -154,7 +154,7 @@ async function create(req, res, next) {
         if (paymentMethod === 'COD') {
             finalStatus = 'PROCESSING';
             await connection.execute("UPDATE orders SET status='PROCESSING' WHERE id=?", [orderId]);
-            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,'CONFIRMED','PROCESSING','Kho còn hàng, tự động chuẩn bị hàng')", [orderId]);
+            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,'CONFIRMED','PROCESSING','Đã giữ hàng, tự động chuyển sang chuẩn bị hàng')", [orderId]);
         }
         await connection.execute('DELETE FROM cart_items WHERE user_id=? AND is_selected=1', [req.user.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận. Phương thức thanh toán: ${paymentMethod}.`,orderId]);
@@ -302,6 +302,7 @@ async function cancelMine(req,res,next){
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,check.fromStatus,'CANCELLED','Khách hủy đơn']);
         await releaseCoupon(connection,order.id);
+        await connection.execute("UPDATE payment_attempts SET status='EXPIRED' WHERE order_id=? AND status='PENDING'",[order.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đơn hàng đã hủy',?,?)",[req.user.id,`Đơn ${order.order_code} đã được hủy.`,order.id]);
         await connection.commit();return res.json({success:true,message:'Order cancelled.'});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}

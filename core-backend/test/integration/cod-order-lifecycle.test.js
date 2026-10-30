@@ -228,7 +228,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       assert.equal(history[0].note, 'Khách đặt hàng');
       assert.equal(history[1].from_status, 'CONFIRMED');
       assert.equal(history[1].to_status, 'PROCESSING');
-      assert.equal(history[1].note, 'Kho còn hàng, tự động chuẩn bị hàng');
+      assert.equal(history[1].note, 'Đã giữ hàng, tự động chuyển sang chuẩn bị hàng');
 
       // Giỏ hàng món đã chọn bị xóa
       const [cartItems] = await pool.query('SELECT * FROM cart_items WHERE user_id=?', [userAId]);
@@ -637,7 +637,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       );
       assert.equal(hist.length, 1);
       assert.equal(hist[0].from_status, 'CONFIRMED');
-      assert.equal(hist[0].note, 'Kho còn hàng, tự động chuẩn bị hàng');
+      assert.equal(hist[0].note, 'Đã giữ hàng, tự động chuyển sang chuẩn bị hàng');
     });
 
     // =========================================================================

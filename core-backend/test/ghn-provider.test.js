@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { ENDPOINTS,configFromEnv,isConfigured,safeSecretEqual,normalizeStatus,canTransitionShipment,webhookEventKey,createOrder } = require('../services/shipping/ghnProvider');
+const { ENDPOINTS,configFromEnv,isConfigured,safeSecretEqual,normalizeStatus,canTransitionShipment,webhookEventKey,createOrder,cancelOrder } = require('../services/shipping/ghnProvider');
 const { buildGhnPayload,isShipmentConfigReady } = require('../controllers/shipmentController');
 
 test('GHN configuration only selects the pinned staging/production endpoints',()=>{
@@ -63,4 +63,20 @@ test('GHN sender configuration requires a district only for the legacy address s
     assert.equal(isShipmentConfigReady(config),false);
     assert.equal(isShipmentConfigReady({...config,fromDistrict:'District 1'}),true);
     assert.equal(isShipmentConfigReady({...config,fromIsNewAddress:true}),true);
+});
+
+test('GHN cancelOrder sends order_codes, headers and handles responses', async () => {
+    let observed;
+    const config = { baseUrl: ENDPOINTS.staging, token: 'local-test-token', shopId: '123' };
+    const success = await cancelOrder({ orderCodes: ['GHN-TEST-1'] }, config, async (url, options) => {
+        observed = { url, options };
+        return { ok: true, json: async () => ({ code: 200, message: 'Success' }) };
+    });
+    assert.equal(observed.url, `${ENDPOINTS.staging}/v2/switch-status/cancel`);
+    assert.equal(observed.options.method, 'POST');
+    assert.equal(observed.options.headers.Token, 'local-test-token');
+    assert.equal(observed.options.headers.ShopId, '123');
+    assert.deepEqual(JSON.parse(observed.options.body), { order_codes: ['GHN-TEST-1'] });
+    assert.equal(success, true);
+    await assert.rejects(() => cancelOrder({}, {}, async () => {}), /credentials are not configured/);
 });

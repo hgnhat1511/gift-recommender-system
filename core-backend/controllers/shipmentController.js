@@ -37,50 +37,83 @@ async function createGhnShipment(req,res,next) {
     const config=ghn.configFromEnv();
     if(!isShipmentConfigReady(config))
         return res.status(503).json({success:false,message:'GHN staging credentials, sender address, and webhook secret are required.'});
+    let order;
+    let existing;
+    let address;
+    let items;
+    const connection1=await pool.getConnection();
     try{
-        const [[order]]=await pool.execute('SELECT id,order_code,status,payment_method,payment_status,total_amount,recipient_name,phone,shipping_address,shipping_carrier,tracking_number FROM orders WHERE id=?',[req.params.orderId]);
-        if(!order)return res.status(404).json({success:false,message:'Order not found.'});
-        if(order.status!=='PROCESSING'||(order.payment_method==='VNPAY'&&order.payment_status!=='PAID'))return res.status(409).json({success:false,message:'Only a processing order that is paid or COD can be dispatched.'});
-        let [[existing]]=await pool.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1",[order.id]);
-        if(existing&&existing.status!=='CREATING'&&existing.status!=='FAILED')return res.status(200).json({success:true,data:existing});
-        const address=typeof order.shipping_address==='string'?JSON.parse(order.shipping_address):order.shipping_address;
-        const [items]=await pool.execute('SELECT product_name name,quantity,unit_price price FROM order_items WHERE order_id=? ORDER BY id',[order.id]);
-        if(!items.length)return res.status(409).json({success:false,message:'Shipment cannot be created without order items.'});
-        const payload=buildGhnPayload({order,address,items,packageInfo,config});
-        if(!payload)return res.status(409).json({success:false,message:'The saved destination address is missing the ward/province details required by GHN.'});
+        await connection1.beginTransaction();
+        const [[lockedOrder]]=await connection1.execute('SELECT id,order_code,status,payment_method,payment_status,total_amount,recipient_name,phone,shipping_address,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[req.params.orderId]);
+        if(!lockedOrder){await connection1.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
+        if(lockedOrder.status!=='PROCESSING'||(lockedOrder.payment_method==='VNPAY'&&lockedOrder.payment_status!=='PAID')){
+            await connection1.rollback();
+            return res.status(409).json({success:false,message:'Only a processing order that is paid or COD can be dispatched.'});
+        }
+        order=lockedOrder;
+        let [[existingShipment]]=await connection1.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1 FOR UPDATE",[order.id]);
+        if(existingShipment&&existingShipment.status!=='CREATING'&&existingShipment.status!=='FAILED'){
+            await connection1.commit();
+            return res.status(200).json({success:true,data:existingShipment});
+        }
+        existing=existingShipment;
+        address=typeof order.shipping_address==='string'?JSON.parse(order.shipping_address):order.shipping_address;
+        const [orderItems]=await connection1.execute('SELECT product_name name,quantity,unit_price price FROM order_items WHERE order_id=? ORDER BY id',[order.id]);
+        if(!orderItems.length){await connection1.rollback();return res.status(409).json({success:false,message:'Shipment cannot be created without order items.'})}
+        items=orderItems;
         if(!existing){
             try{
-                const [created]=await pool.execute("INSERT INTO shipments (order_id,client_order_code,provider,status) VALUES (?,?,'GHN','CREATING')",[order.id,order.order_code]);
+                const [created]=await connection1.execute("INSERT INTO shipments (order_id,client_order_code,provider,status) VALUES (?,?,'GHN','CREATING')",[order.id,order.order_code]);
                 existing={id:created.insertId,client_order_code:order.order_code,status:'CREATING'};
             }catch(error){
-                if(error.code!=='ER_DUP_ENTRY')return next(error);
-                [[existing]]=await pool.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1",[order.id]);
-                if(existing&&existing.status!=='CREATING'&&existing.status!=='FAILED')return res.json({success:true,data:existing});
+                if(error.code!=='ER_DUP_ENTRY'){await connection1.rollback();return next(error)}
+                const [[dup]]=await connection1.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1 FOR UPDATE",[order.id]);
+                existing=dup;
+                if(existing&&existing.status!=='CREATING'&&existing.status!=='FAILED'){await connection1.commit();return res.json({success:true,data:existing})}
             }
         }else{
-            await pool.execute("UPDATE shipments SET status='CREATING' WHERE id=? AND status='FAILED'",[existing.id]);
+            await connection1.execute("UPDATE shipments SET status='CREATING' WHERE id=? AND status='FAILED'",[existing.id]);
         }
-        let providerResult;
-        try{providerResult=await ghn.createOrder(payload,config)}catch(error){
-            await pool.execute("UPDATE shipments SET status='FAILED' WHERE id=? AND status='CREATING'",[existing.id]);
-            return next(error);
-        }
-        const connection=await pool.getConnection();
-        try{
-            await connection.beginTransaction();
-            const [[current]]=await connection.execute('SELECT id,status,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[order.id]);
-            if(!current||current.status!=='PROCESSING'){await connection.rollback();return res.status(409).json({success:false,message:'Order status changed while creating the shipment.'})}
-            await connection.execute("UPDATE shipments SET provider_order_code=?,tracking_number=?,status=IF(status='CREATING','CREATED',status) WHERE id=?",[providerResult.orderCode,providerResult.orderCode,existing.id]);
-            if(current.shipping_carrier!=='GHN'||current.tracking_number!==providerResult.orderCode){
-                await connection.execute("UPDATE orders SET shipping_carrier='GHN',tracking_number=? WHERE id=?",[providerResult.orderCode,order.id]);
-                await connection.execute('INSERT INTO order_shipping_history (order_id,changed_by,carrier,tracking_number,note) VALUES (?,? ,\'GHN\',?,?)',[order.id,req.user.id,providerResult.orderCode,`Shipment created in GHN ${config.environment} environment.`]);
-                await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'SHIPMENT_CREATE','order',order.id,JSON.stringify({provider:'GHN',environment:config.environment,trackingNumber:providerResult.orderCode})]);
+        await connection1.commit();
+    }catch(error){await connection1.rollback();return next(error)}finally{connection1.release()}
+
+    const payload=buildGhnPayload({order,address,items,packageInfo,config});
+    if(!payload)return res.status(409).json({success:false,message:'The saved destination address is missing the ward/province details required by GHN.'});
+
+    let providerResult;
+    try{
+        providerResult=await ghn.createOrder(payload,config);
+    }catch(error){
+        await pool.execute("UPDATE shipments SET status='FAILED' WHERE id=? AND status='CREATING'",[existing.id]);
+        return next(error);
+    }
+
+    const connection2=await pool.getConnection();
+    try{
+        await connection2.beginTransaction();
+        const [[current]]=await connection2.execute('SELECT id,status,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[order.id]);
+        if(!current||current.status!=='PROCESSING'){
+            try{
+                if(typeof ghn.cancelOrder==='function'){
+                    await ghn.cancelOrder({orderCodes:[providerResult.orderCode]},config);
+                }
+            }catch(cancelErr){
+                console.warn('Could not auto-cancel GHN order on provider:',cancelErr.message);
             }
-            await connection.commit();
-            const [[shipment]]=await pool.execute('SELECT provider_order_code,tracking_number,status FROM shipments WHERE id=?',[existing.id]);
-            return res.status(201).json({success:true,data:{provider:'GHN',trackingNumber:shipment.tracking_number,status:shipment.status,estimatedDeliveryAt:providerResult.expectedDeliveryTime,fee:providerResult.totalFee}});
-        }catch(error){await connection.rollback();if(error.code==='ER_DUP_ENTRY'){const [[saved]]=await pool.execute("SELECT provider_order_code trackingNumber,status FROM shipments WHERE order_id=? AND provider='GHN'",[order.id]);if(saved)return res.json({success:true,data:saved})}return next(error)}finally{connection.release()}
-    }catch(error){return next(error)}
+            await connection2.execute("UPDATE shipments SET provider_order_code=?,tracking_number=?,status='CANCELLED' WHERE id=?",[providerResult.orderCode,providerResult.orderCode,existing.id]);
+            await connection2.commit();
+            return res.status(409).json({success:false,message:'Order status changed while creating the shipment. GHN shipment was aborted.'});
+        }
+        await connection2.execute("UPDATE shipments SET provider_order_code=?,tracking_number=?,status=IF(status='CREATING','CREATED',status) WHERE id=?",[providerResult.orderCode,providerResult.orderCode,existing.id]);
+        if(current.shipping_carrier!=='GHN'||current.tracking_number!==providerResult.orderCode){
+            await connection2.execute("UPDATE orders SET shipping_carrier='GHN',tracking_number=? WHERE id=?",[providerResult.orderCode,order.id]);
+            await connection2.execute('INSERT INTO order_shipping_history (order_id,changed_by,carrier,tracking_number,note) VALUES (?,? ,\'GHN\',?,?)',[order.id,req.user.id,providerResult.orderCode,`Shipment created in GHN ${config.environment} environment.`]);
+            await connection2.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'SHIPMENT_CREATE','order',order.id,JSON.stringify({provider:'GHN',environment:config.environment,trackingNumber:providerResult.orderCode})]);
+        }
+        await connection2.commit();
+        const [[shipment]]=await pool.execute('SELECT provider_order_code,tracking_number,status FROM shipments WHERE id=?',[existing.id]);
+        return res.status(201).json({success:true,data:{provider:'GHN',trackingNumber:shipment.tracking_number,status:shipment.status,estimatedDeliveryAt:providerResult.expectedDeliveryTime,fee:providerResult.totalFee}});
+    }catch(error){await connection2.rollback();if(error.code==='ER_DUP_ENTRY'){const [[saved]]=await pool.execute("SELECT provider_order_code trackingNumber,status FROM shipments WHERE order_id=? AND provider='GHN'",[order.id]);if(saved)return res.json({success:true,data:saved})}return next(error)}finally{connection2.release()}
 }
 
 function webhookSecretValid(req,config) {

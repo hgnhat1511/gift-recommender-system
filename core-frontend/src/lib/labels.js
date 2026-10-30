@@ -152,6 +152,7 @@ export const ORDER_HISTORY_NOTES = Object.freeze({
 
   // Ghi chú tự động chuyển trạng thái
   'Kho còn hàng, tự động chuẩn bị hàng': 'Kho còn hàng, tự động chuẩn bị hàng',
+  'Đã giữ hàng, tự động chuyển sang chuẩn bị hàng': 'Đã giữ hàng, tự động chuyển sang chuẩn bị hàng',
   'Thanh toán thành công, tự động chuẩn bị hàng': 'Thanh toán thành công, tự động chuẩn bị hàng',
 });
 

@@ -82,6 +82,7 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
       'Khách đặt hàng',
       'Khách hủy đơn',
       'Kho còn hàng, tự động chuẩn bị hàng',
+      'Đã giữ hàng, tự động chuyển sang chuẩn bị hàng',
       'Thanh toán thành công, tự động chuẩn bị hàng',
       'Quản trị viên cập nhật trạng thái',
       'Đơn vị vận chuyển đã lấy hàng',

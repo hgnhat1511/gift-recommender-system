@@ -68,4 +68,19 @@ async function createOrder(payload, config=configFromEnv(), fetchImpl=fetch) {
     }finally{clearTimeout(timer)}
 }
 
-module.exports={ENDPOINTS,STATUS_MAP,configFromEnv,isConfigured,safeSecretEqual,normalizeStatus,canTransitionShipment,webhookEventKey,createOrder};
+async function cancelOrder({ orderCodes }, config=configFromEnv(), fetchImpl=fetch) {
+    if(!isConfigured(config))throw new Error('GHN staging credentials are not configured.');
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8000);
+    try {
+        const codes = Array.isArray(orderCodes) ? orderCodes : [orderCodes];
+        const response=await fetchImpl(`${config.baseUrl}/v2/switch-status/cancel`,{
+            method:'POST',headers:{'content-type':'application/json',Token:config.token,ShopId:String(config.shopId)},
+            body:JSON.stringify({order_codes:codes}),signal:controller.signal
+        });
+        if(!response.ok)throw new Error('GHN provider cancel request failed.');
+        const body=await response.json();
+        return body?.code===200;
+    }finally{clearTimeout(timer)}
+}
+
+module.exports={ENDPOINTS,STATUS_MAP,configFromEnv,isConfigured,safeSecretEqual,normalizeStatus,canTransitionShipment,webhookEventKey,createOrder,cancelOrder};

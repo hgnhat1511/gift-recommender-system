@@ -69,7 +69,7 @@ async function vnpayIpn(req, res, next) {
         if (fields.vnp_CurrCode !== attempt.currency || expectedAmount == null || fields.vnp_Amount !== String(expectedAmount) || safeAmountMinor(order.total_amount) !== expectedAmount) {
             await connection.rollback(); return ipnReply(res,'04','Invalid amount');
         }
-        if (attempt.status !== 'PENDING') {
+        if (attempt.status !== 'PENDING' && attempt.status !== 'EXPIRED') {
             await connection.commit(); return ipnReply(res,'02','Order already confirmed');
         }
         const providerSaysSuccess = fields.vnp_ResponseCode === '00' && fields.vnp_TransactionStatus === '00';
@@ -77,8 +77,8 @@ async function vnpayIpn(req, res, next) {
             await connection.execute("UPDATE payment_attempts SET status='FAILED',provider_response_code=? WHERE id=? AND status='PENDING'",[String(fields.vnp_ResponseCode || 'UNKNOWN').slice(0,20),attempt.id]);
             await connection.commit(); return ipnReply(res,'00','Payment result recorded');
         }
-        if (Number(attempt.is_expired) === 1 || order.status === 'CANCELLED' || order.status === 'DELIVERED' || order.payment_method !== 'VNPAY' || order.payment_status !== 'UNPAID') {
-            await connection.execute("UPDATE payment_attempts SET status='REVIEW',provider_transaction_id=?,provider_response_code='00' WHERE id=? AND status='PENDING'",[String(fields.vnp_TransactionNo || '').slice(0,100)||null,attempt.id]);
+        if (attempt.status === 'EXPIRED' || Number(attempt.is_expired) === 1 || order.status === 'CANCELLED' || order.status === 'DELIVERED' || order.payment_method !== 'VNPAY' || order.payment_status !== 'UNPAID') {
+            await connection.execute("UPDATE payment_attempts SET status='REVIEW',provider_transaction_id=?,provider_response_code='00' WHERE id=? AND status IN ('PENDING','EXPIRED')",[String(fields.vnp_TransactionNo || '').slice(0,100)||null,attempt.id]);
             await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (NULL,\'PAYMENT_REVIEW\',\'order\',?,CAST(? AS JSON))',[order.id,JSON.stringify({provider:'VNPAY',reference:attempt.reference,reason:'Successful callback arrived after the order or payment attempt became ineligible.'})]);
             await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'PAYMENT','Cần kiểm tra thanh toán',?,?)",[order.user_id,`VNPAY báo đã nhận tiền cho đơn ${order.order_code}, nhưng đơn cần cửa hàng kiểm tra trước khi xác nhận.`,order.id]);
             await connection.commit(); return ipnReply(res,'00','Payment received and flagged for review');
