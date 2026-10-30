@@ -1,15 +1,16 @@
 /* ==========================================================================
    Giftly — Floating Dock (Góc Phải Dưới Màn Hình)
    1. Nút cuộn về đầu trang (Scroll to top) khi lướt xuống gần giữa trang
-   2. Danh sách 5 icon mạng xã hội: Zalo, FB, IG, Telegram, X
+   2. Danh sách icon mạng xã hội có URL chính thức (Zalo, FB, IG, Telegram, X)
    3. Nút tròn gom các icon vào 1 chỗ hoặc phóng ra (đỡ che màn hình)
+   4. Tôn trọng prefers-reduced-motion và tối ưu tránh che CTA trên mobile
    ========================================================================== */
 
 .floating-dock-container {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 999;
+  z-index: 45; /* Dưới navbar modal/toast (50-100) nhưng nổi trên nội dung thường */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -36,7 +37,7 @@
   opacity: 0;
   visibility: hidden;
   transform: translateY(12px) scale(0.85);
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0.28s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0.25s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   outline: none;
 }
 
@@ -60,14 +61,14 @@
 }
 
 /* ==========================================================================
-   2. DANH SÁCH 5 ICON MẠNG XÃ HỘI (THU GỌN / PHÓNG RA)
+   2. DANH SÁCH ICON MẠNG XÃ HỘI (THU GỌN / PHÓNG RA)
    ========================================================================== */
 .floating-social-list {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), max-height 0.3s ease, margin 0.28s ease;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), max-height 0.28s ease, margin 0.25s ease;
 }
 
 /* Trạng thái thu gọn (gom vào 1 chỗ) */
@@ -210,7 +211,7 @@
   outline: none;
 }
 
-/* Khi đang đóng (thu gọn): Nền đỏ nổi bật với icon chat */
+/* Khi đang đóng (thu gọn): Nền đỏ với icon chat */
 .floating-toggle-btn.is-closed {
   background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
   color: #FFFFFF;
@@ -237,26 +238,6 @@
   0% { transform: scale(0.95); opacity: 0.7; }
   50% { transform: scale(1.18); opacity: 0.15; }
   100% { transform: scale(1.28); opacity: 0; }
-}
-
-/* Huy hiệu số 5 nhỏ gọn khi thu gọn */
-.toggle-badge {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: #FFFFFF;
-  color: var(--brand-primary, #DC2626);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid var(--brand-primary, #DC2626);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 /* Khi đang mở (phóng ra): Nút X màu xám đen để thu gọn */
@@ -300,6 +281,7 @@
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
   letter-spacing: 0.01em;
+  max-width: 220px;
 }
 
 /* Mũi tên nhỏ chỉ sang phải vào icon */
@@ -324,11 +306,30 @@
 }
 
 /* ==========================================================================
-   5. RESPONSIVE TRÊN MOBILE & TABLET
+   5. PREFERS-REDUCED-MOTION (TÔN TRỌNG TÙY CHỌN NGƯỜI DÙNG)
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-to-top-btn,
+  .floating-social-list,
+  .floating-social-btn,
+  .floating-toggle-btn,
+  .floating-dock-tooltip {
+    transition: none !important;
+    animation: none !important;
+  }
+  .floating-social-btn.is-pulsing::before,
+  .floating-toggle-btn.is-closed::before {
+    display: none !important;
+    animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   6. RESPONSIVE TRÊN MOBILE & TABLET (ĐẶC BIỆT 390px)
    ========================================================================== */
 @media (max-width: 640px) {
   .floating-dock-container {
-    bottom: 16px;
+    bottom: 20px;
     right: 14px;
     gap: 8px;
   }
@@ -345,6 +346,6 @@
     height: 44px;
   }
   .floating-dock-tooltip {
-    display: none; /* Ẩn tooltip trên màn hình cảm ứng để tránh vướng */
+    display: none !important; /* Ẩn tooltip trên mobile touch screen để tránh che nội dung */
   }
 }

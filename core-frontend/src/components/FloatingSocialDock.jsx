@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ArrowUp, MessageCircle, X } from 'lucide-react';
+import { siteInfo } from '../config/siteInfo.js';
 import './FloatingSocialDock.css';
 
 function ZaloIcon() {
@@ -45,12 +46,11 @@ function TwitterXIcon() {
   );
 }
 
-const socialLinks = [
+const rawSocialChannels = [
   {
     id: 'zalo',
     name: 'Zalo',
-    label: 'Chat Zalo tư vấn 1:1',
-    href: 'https://zalo.me',
+    label: 'Chat Zalo tư vấn',
     className: 'floating-social-zalo',
     Icon: ZaloIcon,
     hasPulse: true,
@@ -58,32 +58,28 @@ const socialLinks = [
   {
     id: 'facebook',
     name: 'Facebook',
-    label: 'Nhắn tin Messenger Facebook',
-    href: 'https://facebook.com',
+    label: 'Nhắn tin Messenger',
     className: 'floating-social-fb',
     Icon: FacebookIcon,
   },
   {
     id: 'instagram',
     name: 'Instagram',
-    label: 'Theo dõi Giftly trên Instagram',
-    href: 'https://instagram.com',
+    label: 'Theo dõi Instagram',
     className: 'floating-social-ig',
     Icon: InstagramIcon,
   },
   {
     id: 'telegram',
     name: 'Telegram',
-    label: 'Hỗ trợ qua Telegram',
-    href: 'https://t.me',
+    label: 'Hỗ trợ Telegram',
     className: 'floating-social-tele',
     Icon: TelegramIcon,
   },
   {
     id: 'x',
     name: 'X (Twitter)',
-    label: 'Kênh tin tức Giftly trên X',
-    href: 'https://x.com',
+    label: 'Theo dõi X',
     className: 'floating-social-x',
     Icon: TwitterXIcon,
   },
@@ -92,6 +88,15 @@ const socialLinks = [
 export function FloatingSocialDock() {
   const [isOpen, setIsOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const dockRef = useRef(null);
+
+  // Chỉ hiển thị các kênh mạng xã hội có URL chính thức được cung cấp
+  const activeSocialLinks = rawSocialChannels
+    .map((item) => ({
+      ...item,
+      href: siteInfo.socialLinks?.[item.id] || '',
+    }))
+    .filter((item) => Boolean(item.href && item.href.trim()));
 
   useEffect(() => {
     const handleScroll = () => {
@@ -104,6 +109,17 @@ export function FloatingSocialDock() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Hỗ trợ phím Escape để đóng dock khi đang mở
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
@@ -112,7 +128,11 @@ export function FloatingSocialDock() {
   };
 
   return (
-    <aside className="floating-dock-container" aria-label="Tiện ích liên hệ và cuộn trang">
+    <aside
+      className="floating-dock-container"
+      aria-label="Tiện ích liên hệ và cuộn trang"
+      ref={dockRef}
+    >
       {/* Nút cuộn về đầu trang (hiển thị khi cuộn xuống gần giữa trang) */}
       <button
         type="button"
@@ -121,55 +141,59 @@ export function FloatingSocialDock() {
         aria-label="Cuộn về đầu trang"
         title="Cuộn về đầu trang"
       >
-        <ArrowUp size={20} strokeWidth={2.4} />
+        <ArrowUp size={20} strokeWidth={2.4} aria-hidden="true" />
         <span className="floating-dock-tooltip" role="tooltip">
           Cuộn về đầu trang
         </span>
       </button>
 
-      {/* Danh sách 5 icon mạng xã hội (thu gọn / phóng ra) */}
-      <div className={`floating-social-list ${isOpen ? 'is-expanded' : 'is-collapsed'}`}>
-        {socialLinks.map(({ id, label, href, className, Icon, hasPulse }) => (
-          <a
-            key={id}
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`floating-social-btn ${className} ${hasPulse ? 'is-pulsing' : ''}`}
-            aria-label={label}
-            title={label}
-            tabIndex={isOpen ? 0 : -1}
+      {/* Danh sách các icon mạng xã hội có URL chính thức (chỉ hiển thị nếu có ít nhất 1 kênh cấu hình) */}
+      {activeSocialLinks.length > 0 && (
+        <>
+          <div
+            className={`floating-social-list ${isOpen ? 'is-expanded' : 'is-collapsed'}`}
+            aria-hidden={!isOpen}
           >
-            <span className="floating-social-icon">
-              <Icon />
-            </span>
-            <span className="floating-dock-tooltip" role="tooltip">
-              {label}
-            </span>
-          </a>
-        ))}
-      </div>
+            {activeSocialLinks.map(({ id, label, href, className, Icon, hasPulse }) => (
+              <a
+                key={id}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`floating-social-btn ${className} ${hasPulse ? 'is-pulsing' : ''}`}
+                aria-label={label}
+                title={label}
+                tabIndex={isOpen ? 0 : -1}
+              >
+                <span className="floating-social-icon">
+                  <Icon />
+                </span>
+                <span className="floating-dock-tooltip" role="tooltip">
+                  {label}
+                </span>
+              </a>
+            ))}
+          </div>
 
-      {/* Nút gom các icon vào 1 chỗ hoặc phóng ra đỡ che màn hình */}
-      <button
-        type="button"
-        className={`floating-toggle-btn ${isOpen ? 'is-open' : 'is-closed'}`}
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-label={isOpen ? 'Thu gọn các icon liên hệ' : 'Mở rộng các kênh liên hệ và mạng xã hội'}
-        aria-expanded={isOpen}
-      >
-        {isOpen ? (
-          <X size={22} strokeWidth={2.4} />
-        ) : (
-          <>
-            <MessageCircle size={23} strokeWidth={2.2} />
-            <span className="toggle-badge" aria-hidden="true">5</span>
-          </>
-        )}
-        <span className="floating-dock-tooltip" role="tooltip">
-          
-        </span>
-      </button>
+          {/* Nút gom các icon vào 1 chỗ hoặc phóng ra (đã xóa badge 5, có aria-expanded) */}
+          <button
+            type="button"
+            className={`floating-toggle-btn ${isOpen ? 'is-open' : 'is-closed'}`}
+            onClick={() => setIsOpen((prev) => !prev)}
+            aria-label={isOpen ? 'Thu gọn các kênh liên hệ' : 'Mở các kênh liên hệ và tư vấn'}
+            aria-expanded={isOpen}
+          >
+            {isOpen ? (
+              <X size={22} strokeWidth={2.4} aria-hidden="true" />
+            ) : (
+              <MessageCircle size={23} strokeWidth={2.2} aria-hidden="true" />
+            )}
+            <span className="floating-dock-tooltip" role="tooltip">
+              {isOpen ? 'Thu gọn' : 'Kênh liên hệ & tư vấn'}
+            </span>
+          </button>
+        </>
+      )}
     </aside>
   );
 }

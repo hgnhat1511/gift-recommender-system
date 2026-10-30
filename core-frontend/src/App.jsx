@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Search,
-  ShoppingBag,
-  UserRound,
   Heart,
   Gift,
   Sparkles,
@@ -12,7 +9,6 @@ import {
   ShieldCheck,
   ChevronRight,
   ChevronLeft,
-  Menu,
   X,
   Cake,
   Flower2,
@@ -22,74 +18,61 @@ import {
   GraduationCap,
   Briefcase,
   Phone,
-  MessageCircle,
   Tag,
-  Percent,
-  Clock,
-  Sparkle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import './App.css';
-import api, { getAuth, getApiError } from './lib/api.js';
+import api, { getApiError } from './lib/api.js';
 import { ProductCard } from './pages/store/CatalogPages.jsx';
-import { useCart } from './context/CartContext.jsx';
+import { SiteHeader } from './components/SiteHeader.jsx';
 import { FloatingSocialDock } from './components/FloatingSocialDock.jsx';
+import { siteInfo } from './config/siteInfo.js';
 
-function FacebookIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-    </svg>
-  );
-}
-
-function TwitterXIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  );
-}
-
-function ZaloIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true">
-      <path d="M24 4C13 4 4 12.1 4 22c0 5.6 3 10.7 7.7 14.1-.3 2.1-1.4 5.3-3.2 7.3 0 0 4.7-.6 8.5-3.3 2.2.6 4.6.9 7 .9 11 0 20-8.1 20-18S35 4 24 4zm8.6 24.5h-9.8c-.8 0-1.4-.6-1.4-1.4 0-.4.2-.8.5-1.1l7.1-8.2h-6.2c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4h9.8c.8 0 1.4.6 1.4 1.4 0 .4-.2.8-.5 1.1l-7.1 8.2h6.2c.8 0 1.4.6 1.4 1.4s-.6 1.4-1.4 1.4z"/>
-    </svg>
-  );
-}
-
-const categoryIcons = [Cake, Heart, Flower2, Gift, Coffee, Sparkles];
-const categoryColors = ['pink', 'rose', 'green', 'purple', 'orange', 'blue'];
-
+// Dịp lễ: Khớp chính xác với occasion_tags trong DB dev
 const festiveOccasions = [
   { id: 'birthday', name: 'Sinh nhật & Kỷ niệm', icon: Cake, path: '/products?occasion=birthday', badge: 'Hot' },
   { id: 'valentines', name: 'Lễ tình nhân (Valentine)', icon: Heart, path: '/products?occasion=valentines', badge: 'Lãng mạn' },
-  { id: 'women', name: 'Quốc tế Phụ nữ (8/3 - 20/10)', icon: Flower2, path: '/products?occasion=anniversary', badge: 'Ý nghĩa' },
-  { id: 'holiday', name: 'Giáng sinh & Năm mới (Tết)', icon: Sparkles, path: '/products?occasion=thank-you', badge: 'Mùa lễ' },
+  { id: 'anniversary', name: 'Kỷ niệm ngày cưới & tình yêu', icon: Flower2, path: '/products?occasion=anniversary', badge: 'Ý nghĩa' },
+  { id: 'graduation', name: 'Tốt nghiệp & Thăng tiến', icon: GraduationCap, path: '/products?occasion=graduation' },
   { id: 'housewarming', name: 'Tân gia & Khai trương', icon: Home, path: '/products?occasion=housewarming' },
-  { id: 'graduation', name: 'Tốt nghiệp & Thăng chức', icon: GraduationCap, path: '/products?occasion=graduation' },
-  { id: 'corporate', name: 'Quà doanh nghiệp & Tri ân', icon: Briefcase, path: '/products?occasion=thank-you' },
-  { id: 'all', name: 'Tất cả bộ sưu tập quà', icon: Gift, path: '/products' },
+  { id: 'promotion', name: 'Thăng chức & Công việc', icon: Briefcase, path: '/products?occasion=promotion' },
+  { id: 'thank-you', name: 'Cảm ơn & Tri ân', icon: Sparkles, path: '/products?occasion=thank-you' },
+  { id: 'all', name: 'Tất cả sản phẩm quà tặng', icon: Gift, path: '/products' },
 ];
 
+// Danh mục cửa hàng: Khớp chính xác với bảng categories (ID 1–5) trong MySQL dev
+const storeCategoryGroups = [
+  { id: 1, name: 'Quà sinh nhật', path: '/products?category=1' },
+  { id: 2, name: 'Quà tình yêu', path: '/products?category=2' },
+  { id: 3, name: 'Quà handmade', path: '/products?category=3' },
+  { id: 4, name: 'Quà văn phòng', path: '/products?category=4' },
+  { id: 5, name: 'Hoa & cây cảnh', path: '/products?category=5' },
+];
+
+// Loại quà: Khớp chính xác với cột gift_type trong DB dev
+const giftTypeGroups = [
+  { id: 'gift-box', name: 'Hộp quà & Set quà', path: '/products?giftType=gift-box' },
+  { id: 'flowers', name: 'Hoa tươi & Hoa sáp', path: '/products?giftType=flowers' },
+  { id: 'food', name: 'Bánh kẹo & Đồ ngọt', path: '/products?giftType=food' },
+  { id: 'plant', name: 'Cây cảnh để bàn', path: '/products?giftType=plant' },
+  { id: 'home', name: 'Đồ gia dụng & Trang trí', path: '/products?giftType=home' },
+  { id: 'stationery', name: 'Văn phòng phẩm', path: '/products?giftType=stationery' },
+];
+
+// Người nhận: Khớp chính xác với recipient_tags trong DB dev
 const recipientGroups = [
   { id: 'partner', name: 'Người yêu / Bạn đời', path: '/products?recipient=partner' },
-  { id: 'mother', name: 'Mẹ & Phụ nữ yêu thương', path: '/products?recipient=mother' },
-  { id: 'father', name: 'Bố & Nam giới tinh tế', path: '/products?recipient=father' },
+  { id: 'mother', name: 'Mẹ', path: '/products?recipient=mother' },
   { id: 'friend', name: 'Bạn bè & Bạn thân', path: '/products?recipient=friend' },
-  { id: 'colleague', name: 'Sếp & Đồng nghiệp', path: '/products?recipient=colleague' },
-  { id: 'teacher', name: 'Thầy cô giáo kính yêu', path: '/products?recipient=teacher' },
+  { id: 'colleague', name: 'Đồng nghiệp & Quản lý', path: '/products?recipient=colleague' },
+  { id: 'teacher', name: 'Thầy cô', path: '/products?recipient=teacher' },
+  { id: 'child', name: 'Trẻ em', path: '/products?recipient=child' },
 ];
 
-const giftTypeGroups = [
-  { id: 'box', name: 'Hộp quà & Set quà cao cấp', path: '/products?category=1' },
-  { id: 'flowers', name: 'Hoa tươi & Hoa sáp nghệ thuật', path: '/products?category=2' },
-  { id: 'scents', name: 'Nến thơm & Tinh dầu thư giãn', path: '/products?category=3' },
-  { id: 'treats', name: 'Trà, Cà phê & Bánh ngọt', path: '/products?category=4' },
-  { id: 'plants', name: 'Cây cảnh để bàn phong thủy', path: '/products?category=5' },
-  { id: 'handmade', name: 'Quà lưu niệm & Thủ công', path: '/products?category=6' },
-];
-
+// Ngân sách: Khớp với tham số minPrice và maxPrice của backend catalogController
 const budgetGroups = [
   { id: 'under-300', name: 'Dưới 300.000₫', path: '/products?maxPrice=300000' },
   { id: '300-600', name: '300.000₫ – 600.000₫', path: '/products?minPrice=300000&maxPrice=600000' },
@@ -105,7 +88,7 @@ const defaultFestiveSlides = [
     subtitle: 'Tuyển tập hộp quà thiết kế sang trọng, nến thơm và phụ kiện tinh tế dành tặng người thân yêu.',
     buttonText: 'Khám phá ngay',
     targetUrl: '/products',
-    secondaryButtonText: 'Tư vấn chọn quà',
+    secondaryButtonText: 'Gợi ý chọn quà',
     secondaryTargetUrl: '/gift-finder',
     imageUrl: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=1200&q=80',
     highlightBadge: 'Ưu đãi mùa lễ hội',
@@ -114,10 +97,10 @@ const defaultFestiveSlides = [
     id: 'default-2',
     tag: 'SINH NHẬT & KỶ NIỆM',
     title: 'Món Quà Sinh Nhật · Chạm Đến Trái Tim',
-    subtitle: 'Gợi ý quà tặng chuẩn gu theo sở thích, độ tuổi và ngân sách với tính năng Gift Finder thông minh.',
+    subtitle: 'Gợi ý quà tặng chuẩn gu theo sở thích, độ tuổi và ngân sách với tính năng Gợi ý quà tặng thông minh.',
     buttonText: 'Xem quà sinh nhật',
     targetUrl: '/products?occasion=birthday',
-    secondaryButtonText: 'Dùng Gift Finder',
+    secondaryButtonText: 'Dùng Gợi ý quà tặng',
     secondaryTargetUrl: '/gift-finder',
     imageUrl: 'https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&w=1200&q=80',
     highlightBadge: 'Hộp quà thiết kế riêng',
@@ -137,8 +120,6 @@ const defaultFestiveSlides = [
 ];
 
 function App() {
-  const [search, setSearch] = useState('');
-  const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [newProducts, setNewProducts] = useState([]);
   const [popularProducts, setPopularProducts] = useState([]);
@@ -149,11 +130,13 @@ function App() {
   const [productCount, setProductCount] = useState(0);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState('');
-  const { cartCount } = useCart();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [showLeftSidebar, setShowLeftSidebar] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(true);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const navigate = useNavigate();
 
+  // Nguồn banner: Dùng dữ liệu từ homepage_banners nếu có, fallback sang defaultFestiveSlides
   const activeSlides = banners.length > 0
     ? banners.map((b, i) => ({
         id: b.id || `banner-${i}`,
@@ -162,7 +145,7 @@ function App() {
         subtitle: b.subtitle || 'Khám phá bộ sưu tập quà tặng ý nghĩa dành riêng cho bạn.',
         buttonText: b.buttonText || 'Khám phá ngay',
         targetUrl: b.targetUrl || '/products',
-        secondaryButtonText: 'Tư vấn chọn quà',
+        secondaryButtonText: 'Gợi ý quà tặng',
         secondaryTargetUrl: '/gift-finder',
         imageUrl: b.imageUrl,
         highlightBadge: 'Sản phẩm nổi bật',
@@ -178,18 +161,26 @@ function App() {
   }, [sliderPaused, activeSlides.length]);
 
   useEffect(() => {
-    api.get('/products/banners').then(({ data }) => { setBanners(data.data || []); setActiveSlide(0); }).catch(() => {});
+    // 1. Banner từ DB dev (endpoint /products/banners)
+    api.get('/products/banners')
+      .then(({ data }) => {
+        setBanners(data.data || []);
+        setActiveSlide(0);
+      })
+      .catch(() => {});
+
+    // 2. Gợi ý từ hệ thống
     api.get('/products/recommendations', { params: { limit: 6 } })
       .then(({ data }) => setRecommendations(data.data || { method: '', items: [] }))
       .catch(() => {});
+
+    // 3. Sản phẩm
     Promise.all([
-      api.get('/products/categories'),
       api.get('/products', { params: { limit: 6, featured: true, sort: 'popular' } }),
       api.get('/products', { params: { limit: 6, sort: 'newest' } }),
       api.get('/products', { params: { limit: 6, sort: 'popular' } }),
     ])
-      .then(([categoryResponse, productResponse, newestResponse, popularResponse]) => {
-        setCategories(categoryResponse.data.data);
+      .then(([productResponse, newestResponse, popularResponse]) => {
         setProducts(productResponse.data.data.items);
         setNewProducts(newestResponse.data.data.items);
         setPopularProducts(popularResponse.data.data.items);
@@ -199,263 +190,251 @@ function App() {
       .finally(() => setProductsLoading(false));
   }, []);
 
-  const submitSearch = (event) => {
-    event.preventDefault();
-    if (search.trim()) {
-      navigate(`/products?q=${encodeURIComponent(search.trim())}`);
-    }
-  };
-
   return (
     <div className="app">
-      {/* =========================================================================
-          1. HEADER TO HƠN 2.5 LẦN (Grand Festive E-Commerce Header)
-          - Tầng 1: Announcement Top Bar
-          - Tầng 2: Main Header (Logo lớn + Search bar trung tâm + Tiện ích khách hàng)
-          - Tầng 3: Secondary Sub-navigation Bar
-          ========================================================================= */}
-      <header className="header grand-header">
-        {/* Tầng 1: Announcement Bar */}
-        <div className="announcement">
-          <div className="announcement-inner">
-            <div className="announcement-promo">
-              <Sparkles size={15} />
-              <span>Thanh toán COD toàn quốc · Miễn phí giao hàng cho đơn từ 500K · Đổi trả thuận tiện</span>
-            </div>
-            <div className="announcement-contact">
-              <Phone size={13} />
-              <span>Hotline: <strong>1900 6868</strong> (8:00 – 21:30)</span>
-            </div>
-          </div>
+      {/* 1. Header Dùng Chung (SiteHeader - 144px sticky, announcement 36px cuộn mất) */}
+      <SiteHeader />
+
+      {/* 2. Bố Cục 3 Cột (Portal Layout) Có Khả Năng Ẩn/Hiện Sidebar */}
+      <div
+        className={`home-portal-wrapper ${!showLeftSidebar ? 'no-left-sidebar' : ''} ${!showRightSidebar ? 'no-right-sidebar' : ''}`}
+      >
+        {/* Nút bật/tắt Drawer trên Mobile (<768px) */}
+        <div className="mobile-drawer-trigger-bar">
+          <button
+            type="button"
+            className="mobile-drawer-open-btn"
+            onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Mở danh mục các dịp lễ và quà"
+            aria-expanded={mobileDrawerOpen}
+          >
+            <Tag size={16} aria-hidden="true" />
+            <span>Xem danh mục quà & dịp lễ</span>
+          </button>
         </div>
 
-        {/* Tầng 2: Main Large Header */}
-        <div className="header-main">
-          <div className="header-main-inner">
-            {/* Logo Thương hiệu to hơn */}
-            <Link className="brand grand-brand" to="/" aria-label="Giftly trang chủ">
-              <span className="brand-icon grand-brand-icon">
-                <Gift size={32} strokeWidth={2.2} />
-              </span>
-              <span className="brand-name grand-brand-name">
-                giftly<span>.</span>
-                <small>Gửi quà, gửi yêu thương</small>
-              </span>
-            </Link>
-
-            {/* Thanh Tìm Kiếm Lớn ở Giữa (giống Chus / E-Commerce chuẩn) */}
-            <form className="header-search-form" onSubmit={submitSearch} role="search">
-              <div className="header-search-box">
-                <Search size={20} className="search-input-icon" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Tìm món quà bạn đang nghĩ đến (sinh nhật, nến thơm, hoa sáp, hộp quà cao cấp...)..."
-                  aria-label="Tìm kiếm quà tặng"
-                />
-                {search && (
-                  <button type="button" className="search-clear-btn" onClick={() => setSearch('')} aria-label="Xóa">
-                    <X size={16} />
-                  </button>
-                )}
-                <button type="submit" className="search-submit-btn">
-                  <Search size={18} />
-                  <span>Tìm quà</span>
-                </button>
-              </div>
-            </form>
-
-            {/* Các Nút Hành Động Phía Phải (Đơn hàng, Yêu thích, Giỏ hàng, Tài khoản) */}
-            <div className="header-actions grand-actions">
-              <Link to="/orders" className="header-action-item" title="Tra cứu đơn hàng">
-                <Truck size={22} />
-                <span>Đơn hàng</span>
-              </Link>
-
-              <Link to="/favorites" className="header-action-item" title="Danh sách yêu thích">
-                <Heart size={22} />
-                <span>Yêu thích</span>
-              </Link>
-
+        {/* -------------------------------------------------------------
+            CỘT TRÁI: Menu Danh mục các dịp lễ & quà kéo dài suốt trang
+            ------------------------------------------------------------- */}
+        {showLeftSidebar && (
+          <aside
+            className={`home-sidebar-left ${mobileDrawerOpen ? 'is-drawer-open' : ''}`}
+            aria-label="Menu danh mục dịp lễ và quà"
+          >
+            {/* Header của Drawer trên mobile */}
+            <div className="drawer-mobile-header">
+              <span className="drawer-title">Danh mục dịp lễ & quà</span>
               <button
                 type="button"
-                className="header-action-item cart-action-item"
-                onClick={() => navigate('/cart')}
-                aria-label={`Giỏ hàng có ${cartCount} sản phẩm`}
+                className="drawer-close-btn"
+                onClick={() => setMobileDrawerOpen(false)}
+                aria-label="Đóng danh mục"
               >
-                <div className="cart-icon-wrapper">
-                  <ShoppingBag size={23} />
-                  {cartCount > 0 && <span className="cart-badge-count">{cartCount}</span>}
-                </div>
-                <span>Giỏ hàng</span>
-              </button>
-
-              <Link
-                to={getAuth()?.token ? '/account' : '/login'}
-                className="header-action-item account-action-item"
-                title="Tài khoản cá nhân"
-              >
-                <UserRound size={22} />
-                <span>{getAuth()?.token ? 'Tài khoản' : 'Đăng nhập'}</span>
-              </Link>
-
-              {/* Mobile menu trigger */}
-              <button
-                className="icon-button mobile-menu"
-                aria-label="Mở menu"
-                onClick={() => setMenuOpen(!menuOpen)}
-              >
-                {menuOpen ? <X size={24} /> : <Menu size={24} />}
+                <X size={20} />
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Tầng 3: Secondary Navigation Bar */}
-        <nav className={`header-subnav ${menuOpen ? 'subnav-open' : ''}`}>
-          <div className="subnav-inner">
-            <Link to="/" className="subnav-link is-active" onClick={() => setMenuOpen(false)}>
-              Trang chủ
-            </Link>
-            <Link to="/products" className="subnav-link" onClick={() => setMenuOpen(false)}>
-              Danh mục quà
-            </Link>
-            <Link to="/products" className="subnav-link" onClick={() => setMenuOpen(false)}>
-              Tất cả sản phẩm
-            </Link>
-            <Link to="/gift-finder" className="subnav-link highlight-link" onClick={() => setMenuOpen(false)}>
-              <Sparkles size={16} /> Gift Finder (Trợ lý AI)
-            </Link>
-            <Link to="/products?sort=popular" className="subnav-link" onClick={() => setMenuOpen(false)}>
-              Bán chạy nhất
-            </Link>
-            <Link to="/products?occasion=holiday" className="subnav-link" onClick={() => setMenuOpen(false)}>
-              Ưu đãi mùa lễ hội
-            </Link>
-            <Link to="/products?occasion=thank-you" className="subnav-link" onClick={() => setMenuOpen(false)}>
-              Quà doanh nghiệp
-            </Link>
-          </div>
-        </nav>
-      </header>
-
-      {/* =========================================================================
-          2. BỐ CỤC 3 CỘT (PORTAL LAYOUT) TRANG CHỦ
-          - CỘT TRÁI: Menu danh mục các dịp lễ, quà kéo dài suốt trang (như Reddit)
-          - CỘT GIỮA: Nội dung trang chủ (Hero carousel + Sản phẩm CĂN GIỮA)
-          - CỘT PHẢI: Quảng cáo mùa lễ hội + Kênh icon liên hệ X, Facebook LUÔN NẰM TRONG MÀN HÌNH
-          ========================================================================= */}
-      <div className="home-portal-wrapper">
-        {/* -------------------------------------------------------------
-            CỘT TRÁI: Menu Danh mục các dịp lễ, loại quà kéo dài suốt trang
-            ------------------------------------------------------------- */}
-        <aside className="home-sidebar-left" aria-label="Menu danh mục dịp lễ và quà">
-          {/* Nhóm 1: Các dịp lễ & kỷ niệm */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">
-              <Sparkles size={16} />
-              <span>Dịp Lễ & Kỷ Niệm</span>
+            {/* Nhóm 1: Các dịp lễ & kỷ niệm (Real occasion_tags) */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title">
+                <Sparkles size={16} aria-hidden="true" />
+                <span>Dịp Lễ & Kỷ Niệm</span>
+              </div>
+              <ul className="sidebar-group-list">
+                {festiveOccasions.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.id}>
+                      <Link
+                        to={item.path}
+                        className="sidebar-item-link"
+                        onClick={() => setMobileDrawerOpen(false)}
+                      >
+                        <span className="sidebar-icon-wrap"><Icon size={16} /></span>
+                        <span className="sidebar-item-name">{item.name}</span>
+                        {(item.id === 'all' ? (productCount > 0 ? `${productCount}` : null) : item.badge) && (
+                          <span className="sidebar-badge">
+                            {item.id === 'all' ? `${productCount}` : item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-            <ul className="sidebar-group-list">
-              {festiveOccasions.map((item) => {
-                const Icon = item.icon;
-                return (
+
+            {/* Nhóm 2: Danh mục cửa hàng (Real DB categories ID 1–5) */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title">
+                <Gift size={16} aria-hidden="true" />
+                <span>Danh Mục Cửa Hàng</span>
+              </div>
+              <ul className="sidebar-group-list">
+                {storeCategoryGroups.map((item) => (
                   <li key={item.id}>
-                    <Link to={item.path} className="sidebar-item-link">
-                      <span className="sidebar-icon-wrap"><Icon size={16} /></span>
+                    <Link
+                      to={item.path}
+                      className="sidebar-item-link"
+                      onClick={() => setMobileDrawerOpen(false)}
+                    >
+                      <span className="sidebar-bullet">•</span>
                       <span className="sidebar-item-name">{item.name}</span>
-                      {(item.id === 'all' ? (productCount > 0 ? `${productCount}` : null) : item.badge) && (
-                        <span className="sidebar-badge">
-                          {item.id === 'all' ? `${productCount}` : item.badge}
-                        </span>
-                      )}
+                      <ChevronRight size={14} className="sidebar-arrow" />
                     </Link>
                   </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {/* Nhóm 2: Danh mục loại quà */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">
-              <Gift size={16} />
-              <span>Danh Mục Loại Quà</span>
+                ))}
+              </ul>
             </div>
-            <ul className="sidebar-group-list">
-              {giftTypeGroups.map((item) => (
-                <li key={item.id}>
-                  <Link to={item.path} className="sidebar-item-link">
-                    <span className="sidebar-bullet">•</span>
-                    <span className="sidebar-item-name">{item.name}</span>
-                    <ChevronRight size={14} className="sidebar-arrow" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
 
-          {/* Nhóm 3: Quà theo người nhận */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">
-              <UserRound size={16} />
-              <span>Theo Người Nhận</span>
+            {/* Nhóm 3: Loại quà (Real DB gift_type) */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title">
+                <Tag size={16} aria-hidden="true" />
+                <span>Loại Quà Tặng</span>
+              </div>
+              <ul className="sidebar-group-list">
+                {giftTypeGroups.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={item.path}
+                      className="sidebar-item-link"
+                      onClick={() => setMobileDrawerOpen(false)}
+                    >
+                      <span className="sidebar-bullet">•</span>
+                      <span className="sidebar-item-name">{item.name}</span>
+                      <ChevronRight size={14} className="sidebar-arrow" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="sidebar-group-list">
-              {recipientGroups.map((item) => (
-                <li key={item.id}>
-                  <Link to={item.path} className="sidebar-item-link">
-                    <span className="sidebar-bullet">•</span>
-                    <span className="sidebar-item-name">{item.name}</span>
-                    <ChevronRight size={14} className="sidebar-arrow" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
 
-          {/* Nhóm 4: Mức ngân sách */}
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">
-              <Tag size={16} />
-              <span>Mức Ngân Sách</span>
+            {/* Nhóm 4: Quà theo người nhận (Real DB recipient_tags) */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title">
+                <Gift size={16} aria-hidden="true" />
+                <span>Theo Người Nhận</span>
+              </div>
+              <ul className="sidebar-group-list">
+                {recipientGroups.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={item.path}
+                      className="sidebar-item-link"
+                      onClick={() => setMobileDrawerOpen(false)}
+                    >
+                      <span className="sidebar-bullet">•</span>
+                      <span className="sidebar-item-name">{item.name}</span>
+                      <ChevronRight size={14} className="sidebar-arrow" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="sidebar-group-list">
-              {budgetGroups.map((item) => (
-                <li key={item.id}>
-                  <Link to={item.path} className="sidebar-item-link">
-                    <span className="sidebar-bullet">•</span>
-                    <span className="sidebar-item-name">{item.name}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
 
-          {/* Nhóm 5: Banner Trợ Lý Gift Finder */}
-          <div className="sidebar-finder-promo">
-            <div className="finder-promo-icon">
-              <Sparkles size={24} />
+            {/* Nhóm 5: Mức ngân sách (Backend minPrice & maxPrice) */}
+            <div className="sidebar-group">
+              <div className="sidebar-group-title">
+                <Tag size={16} aria-hidden="true" />
+                <span>Mức Ngân Sách</span>
+              </div>
+              <ul className="sidebar-group-list">
+                {budgetGroups.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to={item.path}
+                      className="sidebar-item-link"
+                      onClick={() => setMobileDrawerOpen(false)}
+                    >
+                      <span className="sidebar-bullet">•</span>
+                      <span className="sidebar-item-name">{item.name}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <strong>Chưa biết chọn gì?</strong>
-            <p>Để Trợ lý Gift Finder gợi ý món quà phù hợp theo người nhận và ngân sách.</p>
-            <Link to="/gift-finder" className="sidebar-finder-btn">
-              Khám phá ngay <ArrowRight size={14} />
-            </Link>
-          </div>
-        </aside>
+
+            {/* Thẻ Gợi Ý Quà Tặng */}
+            <div className="sidebar-finder-promo">
+              <div className="finder-promo-icon">
+                <Sparkles size={24} aria-hidden="true" />
+              </div>
+              <strong>Chưa biết chọn gì?</strong>
+              <p>Tính năng Gợi ý quà tặng giúp so khớp tiêu chí theo người nhận và ngân sách.</p>
+              <Link
+                to="/gift-finder"
+                className="sidebar-finder-btn"
+                onClick={() => setMobileDrawerOpen(false)}
+              >
+                Gợi ý quà tặng ngay <ArrowRight size={14} />
+              </Link>
+            </div>
+          </aside>
+        )}
+
+        {/* Backdrop che khi mở drawer mobile */}
+        {mobileDrawerOpen && (
+          <div
+            className="mobile-drawer-backdrop"
+            onClick={() => setMobileDrawerOpen(false)}
+            aria-hidden="true"
+          />
+        )}
 
         {/* -------------------------------------------------------------
-            CỘT GIỮA: Nội dung chính trang chủ (SẢN PHẨM CĂN GIỮA CHUẨN XÁC)
+            CỘT GIỮA: Nội dung chính trang chủ (SẢN PHẨM CĂN GIỮA)
             ------------------------------------------------------------- */}
         <main className="home-center-content">
+          {/* Thanh công cụ điều khiển Ẩn / Hiện Sidebar (Desktop / Tablet) */}
+          <div className="portal-layout-toolbar" role="toolbar" aria-label="Điều khiển bố cục trang">
+            <button
+              type="button"
+              className="portal-sidebar-toggle-btn"
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              aria-label={showLeftSidebar ? 'Ẩn danh mục bên trái' : 'Hiện danh mục bên trái'}
+              aria-expanded={showLeftSidebar}
+            >
+              {showLeftSidebar ? (
+                <>
+                  <PanelLeftClose size={16} aria-hidden="true" />
+                  <span>Ẩn danh mục</span>
+                </>
+              ) : (
+                <>
+                  <PanelLeftOpen size={16} aria-hidden="true" />
+                  <span>Hiện danh mục</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="portal-sidebar-toggle-btn"
+              onClick={() => setShowRightSidebar(!showRightSidebar)}
+              aria-label={showRightSidebar ? 'Ẩn tiện ích bên phải' : 'Hiện tiện ích bên phải'}
+              aria-expanded={showRightSidebar}
+            >
+              {showRightSidebar ? (
+                <>
+                  <PanelRightClose size={16} aria-hidden="true" />
+                  <span>Ẩn tiện ích</span>
+                </>
+              ) : (
+                <>
+                  <PanelRightOpen size={16} aria-hidden="true" />
+                  <span>Hiện tiện ích</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Banner Carousel Mùa Lễ Hội */}
           <section
             className="hero-festive-carousel"
             onMouseEnter={() => setSliderPaused(true)}
             onMouseLeave={() => setSliderPaused(false)}
-            aria-label="Quảng cáo mùa lễ hội"
+            aria-label="Quảng cáo nổi bật"
           >
             <div className="hero-festive-slides">
               {activeSlides.map((slide, index) => {
@@ -474,15 +453,13 @@ function App() {
                     <div className="festive-slide-content">
                       {slide.highlightBadge && (
                         <div className="festive-badge">
-                          <Sparkles size={14} />
+                          <Sparkles size={14} aria-hidden="true" />
                           <span>{slide.highlightBadge}</span>
                         </div>
                       )}
 
                       <span className="festive-kicker">{slide.tag}</span>
-
                       <h1 className="festive-title">{slide.title}</h1>
-
                       {slide.subtitle && <p className="festive-subtitle">{slide.subtitle}</p>}
 
                       <div className="festive-actions">
@@ -491,7 +468,7 @@ function App() {
                         </Link>
                         {slide.secondaryButtonText && (
                           <Link to={slide.secondaryTargetUrl || '/gift-finder'} className="secondary-button festive-btn-secondary">
-                            <Sparkles size={16} /> {slide.secondaryButtonText}
+                            <Sparkles size={16} aria-hidden="true" /> {slide.secondaryButtonText}
                           </Link>
                         )}
                       </div>
@@ -537,31 +514,31 @@ function App() {
             )}
           </section>
 
-          {/* Quick Categories Bar tròn (Giống Chus.vn ở ảnh 4) */}
-          <div className="quick-category-row">
-            <Link to="/products?sort=popular" className="quick-cat-item">
+          {/* Quick Categories Bar (Dẫn tới các danh mục và trang thật) */}
+          <div className="quick-category-row" aria-label="Danh mục nổi bật">
+            <Link to="/products?occasion=birthday" className="quick-cat-item">
               <div className="quick-cat-circle"><Cake size={22} /></div>
               <span>Sinh Nhật</span>
             </Link>
             <Link to="/products?occasion=valentines" className="quick-cat-item">
               <div className="quick-cat-circle"><Heart size={22} /></div>
-              <span>Người Thương</span>
-            </Link>
-            <Link to="/products?category=1" className="quick-cat-item">
-              <div className="quick-cat-circle"><Gift size={22} /></div>
-              <span>Hộp Quà Cao Cấp</span>
+              <span>Tình Yêu</span>
             </Link>
             <Link to="/products?category=3" className="quick-cat-item">
-              <div className="quick-cat-circle"><Coffee size={22} /></div>
-              <span>Nến Thơm & Trà</span>
+              <div className="quick-cat-circle"><Gift size={22} /></div>
+              <span>Quà Handmade</span>
             </Link>
-            <Link to="/products?category=2" className="quick-cat-item">
+            <Link to="/products?category=4" className="quick-cat-item">
+              <div className="quick-cat-circle"><Coffee size={22} /></div>
+              <span>Văn Phòng</span>
+            </Link>
+            <Link to="/products?category=5" className="quick-cat-item">
               <div className="quick-cat-circle"><Flower2 size={22} /></div>
-              <span>Hoa Tươi & Sáp</span>
+              <span>Hoa & Cây Cảnh</span>
             </Link>
             <Link to="/gift-finder" className="quick-cat-item highlight-quick-cat">
               <div className="quick-cat-circle"><Sparkles size={22} /></div>
-              <span>Gift Finder</span>
+              <span>Gợi Ý Quà Tặng</span>
             </Link>
           </div>
 
@@ -591,27 +568,39 @@ function App() {
             </section>
           )}
 
-          {/* Khối 4 Cam Kết Dịch Vụ */}
-          <section className="benefits">
+          {/* Khối Cam Kết Dịch Vụ Chuẩn Xác */}
+          <section className="benefits" aria-label="Cam kết dịch vụ">
             <div className="benefit-item">
               <span className="benefit-icon"><Truck size={23} /></span>
-              <div><strong>Giao hàng hỏa tốc</strong><small>Trao quà đúng hẹn</small></div>
+              <div>
+                <strong>Giao hàng toàn quốc</strong>
+                <small>Hỗ trợ chuyển phát tiêu chuẩn & hỏa tốc</small>
+              </div>
             </div>
             <div className="benefit-item">
               <span className="benefit-icon"><ShieldCheck size={23} /></span>
-              <div><strong>Thanh toán COD</strong><small>Kiểm tra trước khi nhận</small></div>
+              <div>
+                <strong>Thanh toán COD & VNPAY</strong>
+                <small>Nhận hàng kiểm tra hoặc thanh toán trực tuyến</small>
+              </div>
             </div>
             <div className="benefit-item">
               <span className="benefit-icon"><Sparkles size={23} /></span>
-              <div><strong>Gift Finder AI</strong><small>So khớp quà chuẩn gu</small></div>
+              <div>
+                <strong>Gợi ý quà tặng</strong>
+                <small>So khớp tiêu chí người nhận và ngân sách</small>
+              </div>
             </div>
             <div className="benefit-item">
               <span className="benefit-icon"><Package size={23} /></span>
-              <div><strong>Đóng gói tinh tế</strong><small>Kèm thiệp viết tay</small></div>
+              <div>
+                <strong>Đóng gói cẩn thận</strong>
+                <small>Bao gói quà tinh tế trao gửi người thương</small>
+              </div>
             </div>
           </section>
 
-          {/* Khối Quà Tặng Nổi Bật (Featured Products) - CĂN GIỮA HOÀN HẢO */}
+          {/* Khối Quà Tặng Nổi Bật (Featured Products) - CĂN GIỮA */}
           <section className="section portal-section products-section" id="products">
             <div className="section-heading center-section-heading">
               <div>
@@ -685,7 +674,7 @@ function App() {
             </section>
           )}
 
-          {/* Khối Teaser Gift Finder */}
+          {/* Khối Teaser Gợi Ý Quà Tặng */}
           <section className="ai-section" id="ai">
             <div className="ai-image">
               <img
@@ -694,27 +683,27 @@ function App() {
                 loading="lazy"
               />
               <div className="ai-image-note">
-                <Sparkles size={18} />
+                <Sparkles size={18} aria-hidden="true" />
                 <span>Một món quà, ngàn lời yêu thương</span>
               </div>
             </div>
             <div className="ai-content">
-              <span className="section-kicker">GIFT FINDER</span>
+              <span className="section-kicker">GỢI Ý QUÀ TẶNG</span>
               <h2>Chưa biết tặng gì? <span>Để Giftly gợi ý!</span></h2>
               <p>
                 Chỉ cần cho biết bạn muốn tặng ai, nhân dịp nào và ngân sách bao
-                nhiêu. Hệ thống thông minh sẽ giúp bạn tìm ra những lựa chọn hoàn hảo nhất.
+                nhiêu. Hệ thống sẽ giúp bạn so khớp và tìm ra những lựa chọn phù hợp nhất từ danh mục.
               </p>
               <ul className="ai-check-list">
-                <li><span>✓</span> Chọn theo đối tượng và sở thích cá nhân</li>
-                <li><span>✓</span> Tùy biến theo ngân sách từ tiết kiệm đến cao cấp</li>
-                <li><span>✓</span> Miễn phí thiệp chúc mừng thiết kế riêng</li>
+                <li><span>✓</span> Chọn theo người nhận và dịp tặng cụ thể</li>
+                <li><span>✓</span> Lọc linh hoạt theo ngân sách từ tiết kiệm đến cao cấp</li>
+                <li><span>✓</span> Giải thích lý do phù hợp theo thuộc tính sản phẩm</li>
               </ul>
               <button
                 className="primary-button"
                 onClick={() => navigate('/gift-finder')}
               >
-                Mở Gift Finder <Sparkles size={17} />
+                Mở Gợi ý quà tặng <Sparkles size={17} />
               </button>
             </div>
           </section>
@@ -733,127 +722,70 @@ function App() {
         </main>
 
         {/* -------------------------------------------------------------
-            CỘT PHẢI: Quảng cáo mùa lễ & Kênh icon liên hệ X, Facebook
-            LUÔN NẰM TRONG MÀN HÌNH (Sticky bám theo màn hình khi cuộn)
+            CỘT PHẢI: Quảng Cáo & Thông Tin Hỗ Trợ
             ------------------------------------------------------------- */}
-        <aside className="home-sidebar-right" aria-label="Quảng cáo mùa lễ hội và kênh hỗ trợ">
-          <div className="sidebar-right-sticky">
-            {/* Quảng cáo Mùa Lễ Hội 1: Ưu đãi voucher */}
-            <div className="festive-promo-card">
-              <div className="promo-card-badge">
-                <Sparkles size={13} /> Ưu đãi mùa lễ hội
-              </div>
-              <h3 className="promo-card-title">Món Quà Tinh Tế · Trọn Vẹn Yêu Thương</h3>
-              <p className="promo-card-desc">
-                Giảm ngay <strong>15%</strong> cho combo set quà từ 500K. Tặng kèm thiệp chúc viết tay và hoa sáp cao cấp.
-              </p>
-              <div className="promo-code-box">
-                <span className="promo-code-label">MÃ GIẢM GIÁ:</span>
-                <code className="promo-code-val">GIFTLY15</code>
-              </div>
-              <Link to="/products" className="promo-card-btn">
-                Sử dụng mã ngay <ArrowRight size={15} />
-              </Link>
-            </div>
-
-            {/* Quảng cáo Mùa Lễ Hội 2: Giao quà tốc hành */}
-            <div className="festive-promo-card promo-card-secondary">
-              <div className="promo-card-badge promo-badge-secondary">
-                <Truck size={13} /> Giao hàng hỏa tốc
-              </div>
-              <h3 className="promo-card-title">Trao Tận Tay Đúng Hẹn</h3>
-              <p className="promo-card-desc">
-                Dịch vụ chuyển phát quà nhanh 2H nội thành. Đảm bảo món quà nguyên vẹn và bất ngờ cho người nhận.
-              </p>
-              <Link to="/gift-finder" className="promo-card-btn promo-btn-outline">
-                Tư vấn chọn quà <ChevronRight size={15} />
-              </Link>
-            </div>
-
-            {/* Khối Kênh Liên Hệ Mạng Xã Hội X, Facebook, Zalo (LUÔN NẰM TRONG MÀN HÌNH) */}
-            <div className="sidebar-social-card">
-              <div className="social-card-head">
-                <Phone size={18} className="social-head-icon" />
-                <div>
-                  <strong>Kênh Kết Nối & Hỗ Trợ</strong>
-                  <small>Tư vấn quà tặng 24/7</small>
+        {showRightSidebar && (
+          <aside className="home-sidebar-right" aria-label="Thông tin hỗ trợ và chính sách">
+            <div className="sidebar-right-sticky">
+              {/* Thẻ Vận Chuyển Hỏa Tốc (Không bịa 2H) */}
+              <div className="festive-promo-card">
+                <div className="promo-card-badge">
+                  <Truck size={13} aria-hidden="true" /> Giao hàng hỏa tốc
                 </div>
+                <h3 className="promo-card-title">Trao Tận Tay Đúng Hẹn</h3>
+                <p className="promo-card-desc">
+                  Hỗ trợ dịch vụ chuyển phát hỏa tốc nội thành theo yêu cầu đơn hàng. Đảm bảo món quà nguyên vẹn và đúng thời khắc ý nghĩa.
+                </p>
+                <Link to="/products" className="promo-card-btn">
+                  Xem tất cả sản phẩm <ArrowRight size={15} />
+                </Link>
               </div>
 
-              <p className="social-card-text">
-                Cần tư vấn chọn quà riêng hoặc đặt số lượng lớn cho công ty? Kết nối với chúng tôi qua:
-              </p>
-
-              <div className="social-btn-list">
-                {/* Facebook icon & link */}
-                <a
-                  href="https://facebook.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="social-btn-item social-btn-facebook"
-                  aria-label="Liên hệ Facebook Giftly"
-                >
-                  <FacebookIcon />
-                  <div className="social-btn-text">
-                    <strong>Facebook</strong>
-                    <small>Giftly - Quà Tặng Yêu Thương</small>
+              {/* Thẻ Hỗ Trợ Khách Hàng */}
+              <div className="sidebar-social-card">
+                <div className="social-card-head">
+                  <Phone size={18} className="social-head-icon" aria-hidden="true" />
+                  <div>
+                    <strong>Tư Vấn Chọn Quà</strong>
+                    <small>Hỗ trợ theo từng đơn hàng</small>
                   </div>
-                </a>
-
-                {/* X (Twitter) icon & link */}
-                <a
-                  href="https://x.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="social-btn-item social-btn-x"
-                  aria-label="Theo dõi Giftly trên X"
-                >
-                  <TwitterXIcon />
-                  <div className="social-btn-text">
-                    <strong>X (Twitter)</strong>
-                    <small>@GiftlyStore</small>
-                  </div>
-                </a>
-
-                {/* Zalo chat & link */}
-                <a
-                  href="https://zalo.me"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="social-btn-item social-btn-zalo"
-                  aria-label="Chat Zalo Giftly"
-                >
-                  <ZaloIcon />
-                  <div className="social-btn-text">
-                    <strong>Zalo Chat</strong>
-                    <small>Tư vấn trực tuyến 1:1</small>
-                  </div>
-                </a>
-              </div>
-
-              {/* Hotline trực tiếp */}
-              <div className="social-hotline-box">
-                <div className="hotline-icon">
-                  <Phone size={18} />
                 </div>
-                <div className="hotline-info">
-                  <span>Hotline hỗ trợ miễn phí:</span>
-                  <a href="tel:19006868" className="hotline-link">1900 6868</a>
+
+                <p className="social-card-text">
+                  Bạn cần tìm món quà đặc biệt hoặc đặt số lượng lớn cho công ty? Bạn có thể sử dụng tính năng Gợi ý quà tặng hoặc quản lý đơn hàng trực tiếp trong tài khoản.
+                </p>
+
+                <div className="sidebar-guide-actions">
+                  <Link to="/gift-finder" className="promo-card-btn promo-btn-outline">
+                    Dùng Gợi ý quà tặng <ChevronRight size={15} />
+                  </Link>
                 </div>
+
+                {siteInfo.hotline && (
+                  <div className="social-hotline-box">
+                    <div className="hotline-icon">
+                      <Phone size={18} />
+                    </div>
+                    <div className="hotline-info">
+                      <span>Hotline hỗ trợ:</span>
+                      <a href={`tel:${siteInfo.hotline}`} className="hotline-link">{siteInfo.hotline}</a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
 
       {/* Footer */}
       <footer className="footer" id="account">
         <div className="footer-main">
           <div className="footer-brand">
-            <a className="brand footer-brand-link" href="#home">
-              <span className="brand-icon"><Gift size={24} /></span>
-              <span className="brand-name">giftly<span>.</span><small>Gửi quà, gửi yêu thương</small></span>
-            </a>
+            <Link className="site-brand footer-brand-link" to="/">
+              <span className="site-brand-icon"><Gift size={24} /></span>
+              <span className="site-brand-name">giftly<span>.</span><small>Gửi quà, gửi yêu thương</small></span>
+            </Link>
             <p>
               Nơi giúp bạn tìm món quà phù hợp và gửi gắm tình cảm đến những
               người quan trọng trong mọi khoảnh khắc đáng nhớ.
@@ -863,7 +795,7 @@ function App() {
             <h4>Khám phá</h4>
             <Link to="/products">Danh mục quà</Link>
             <Link to="/products?sort=popular">Sản phẩm nổi bật</Link>
-            <Link to="/gift-finder">Gift Finder</Link>
+            <Link to="/gift-finder">Gợi ý quà tặng</Link>
           </div>
           <div className="footer-column">
             <h4>Hỗ trợ</h4>
@@ -883,7 +815,7 @@ function App() {
         </div>
       </footer>
 
-      {/* Cụm icon mạng xã hội FB, Zalo, IG, X, Tele cố định góc trái dưới */}
+      {/* Cụm tiện ích nổi góc phải dưới */}
       <FloatingSocialDock />
 
       {/* Thông báo Toast */}

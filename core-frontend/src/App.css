@@ -366,6 +366,119 @@
   grid-template-columns: 260px minmax(0, 1fr) 280px;
   gap: 24px;
   align-items: start;
+  transition: grid-template-columns 0.2s ease;
+}
+
+/* Portal layout variants when sidebars are hidden */
+.home-portal-wrapper.no-left-sidebar {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.home-portal-wrapper.no-right-sidebar {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.home-portal-wrapper.no-left-sidebar.no-right-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Dynamic product grid columns when sidebars are collapsed */
+.home-portal-wrapper.no-left-sidebar.no-right-sidebar .home-catalog-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+/* Portal Layout Toolbar (Nút ẩn/hiện sidebar trên Desktop & Tablet) */
+.portal-layout-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-hairline, #E5E7EB);
+  border-radius: var(--radius-sm, 8px);
+  margin-bottom: -12px;
+}
+
+.portal-sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-hairline, #E5E7EB);
+  background: #F9FAFB;
+  color: #374151;
+  border-radius: var(--radius-xs, 6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.portal-sidebar-toggle-btn:hover {
+  background: #F3F4F6;
+  color: var(--brand-primary, #DC2626);
+  border-color: #FCA5A5;
+}
+
+.portal-sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--brand-primary, #DC2626);
+  outline-offset: 2px;
+}
+
+/* Mobile Drawer Styles (<768px) */
+.mobile-drawer-trigger-bar {
+  display: none;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.mobile-drawer-open-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-hairline, #E5E7EB);
+  border-radius: var(--radius-sm, 8px);
+  color: var(--brand-primary, #DC2626);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.drawer-mobile-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E5E7EB;
+  margin-bottom: 12px;
+}
+
+.drawer-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.drawer-close-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #E5E7EB;
+  background: #F9FAFB;
+  border-radius: 6px;
+  color: #4B5563;
+  cursor: pointer;
+}
+
+.mobile-drawer-backdrop {
+  display: none;
 }
 
 /* -------------------------------------------------------------
@@ -1587,22 +1700,64 @@
 /* ==========================================================================
    4. RESPONSIVE BREAKPOINTS
    ========================================================================== */
-@media (max-width: 1280px) {
-  .home-portal-wrapper {
-    grid-template-columns: 240px minmax(0, 1fr);
-  }
+@media (max-width: 1100px) {
   .home-sidebar-right {
-    display: none; /* Cột quảng cáo bên phải ẩn ở màn hình vừa để nhường chỗ */
+    display: none !important; /* Cột quảng cáo bên phải ẩn ở màn hình vừa để nhường chỗ */
+  }
+  .portal-sidebar-toggle-btn:last-child {
+    display: none !important;
+  }
+  .home-portal-wrapper {
+    grid-template-columns: 260px minmax(0, 1fr) !important;
+  }
+  .home-portal-wrapper.no-left-sidebar {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .home-portal-wrapper {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
     padding: 0 16px;
   }
+  .portal-layout-toolbar {
+    display: none !important;
+  }
+  .mobile-drawer-trigger-bar {
+    display: flex !important;
+  }
   .home-sidebar-left {
-    display: none; /* Cột trái ẩn trên tablet/mobile, dùng menu header */
+    display: none;
+  }
+  .home-sidebar-left.is-drawer-open {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 310px !important;
+    max-width: 85vw !important;
+    z-index: 1000 !important;
+    overflow-y: auto !important;
+    background: #FFFFFF !important;
+    border-radius: 0 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25) !important;
+    animation: drawerSlideIn 0.25s ease-out;
+  }
+  .drawer-mobile-header {
+    display: flex !important;
+  }
+  .mobile-drawer-backdrop {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+  }
+  @keyframes drawerSlideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
   }
   .home-catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -1625,24 +1780,11 @@
   .mobile-menu {
     display: grid;
   }
-  .header-subnav {
-    display: none;
-  }
-  .header-subnav.subnav-open {
-    display: block;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: #FFFFFF;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-    z-index: 60;
-  }
-  .subnav-inner {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 16px 20px;
-    gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-sidebar-left.is-drawer-open {
+    animation: none !important;
   }
 }
 

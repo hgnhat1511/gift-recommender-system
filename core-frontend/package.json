@@ -10,6 +10,7 @@
     "test": "node --test src/lib/labels.test.js src/context/CartBadge.test.js src/lib/encoding.test.js",
     "scan:ui": "node scripts/scan-english-ui.mjs",
     "test:badge-mock": "playwright test -c playwright-mock.config.js",
+    "test:visual": "playwright test -c playwright-visual.config.js",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },
