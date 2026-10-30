@@ -8,7 +8,7 @@
 
 /* ==================== HEADER ==================== */
 .store-layout-header {
-  height: 72px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -27,13 +27,13 @@
 .store-layout-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-decoration: none;
   color: var(--brand-primary, #DC2626);
   font-family: var(--font-sans, system-ui, sans-serif);
-  font-weight: 700;
-  font-size: 24px;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.025em;
   line-height: 1;
   flex-shrink: 0;
 }

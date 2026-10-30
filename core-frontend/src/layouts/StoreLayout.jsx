@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { Gift, Heart, ShoppingBag, UserRound } from 'lucide-react';
 import { clearAuth, getAuth } from '../lib/api.js';
 import { useCart } from '../context/CartContext.jsx';
+import { FloatingSocialDock } from '../components/FloatingSocialDock.jsx';
 import './store-layout.css';
 
 export function StoreLayout(){
@@ -45,6 +46,7 @@ export function StoreLayout(){
         <Link to="/">Giftly</Link>
         <span>Gợi ý quà dựa trên thuộc tính sản phẩm. Thanh toán và giao hàng trực tuyến phụ thuộc cấu hình dịch vụ của cửa hàng.</span>
       </footer>
+      <FloatingSocialDock />
     </div>
   );
 }
