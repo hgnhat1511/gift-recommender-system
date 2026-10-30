@@ -52,12 +52,12 @@ function parseCreateOrderBody(body, rawIdempotencyKey) {
   };
 }
 
-const CANCELABLE_CUSTOMER_STATUSES = ['PENDING', 'CONFIRMED'];
+const CANCELABLE_CUSTOMER_STATUSES = ['PENDING', 'CONFIRMED', 'PROCESSING'];
 
 /**
- * Kiểm tra xem khách hàng có được phép tự hủy đơn hay không (Khu vực 2a).
- * Nghiệp vụ: Khách được tự hủy khi đơn ở trạng thái PENDING hoặc CONFIRMED và UNPAID.
- * Các trường hợp khác (PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED) đều bị từ chối 409.
+ * Kiểm tra xem khách hàng có được phép tự hủy đơn hay không.
+ * Nghiệp vụ: Khách được tự hủy khi đơn ở trạng thái PENDING, CONFIRMED hoặc PROCESSING và UNPAID (chưa bàn giao vận chuyển).
+ * Các trường hợp khác (PAID, SHIPPED, DELIVERED, CANCELLED) đều bị từ chối 409.
  *
  * @param {object} order
  * @returns {{ canCancel: true, fromStatus: string } | { canCancel: false, status: number, message: string }}
@@ -70,7 +70,7 @@ function canCustomerCancel(order) {
     return {
       canCancel: false,
       status: 409,
-      message: 'Only pending unpaid or confirmed unpaid orders can be cancelled by the customer.'
+      message: 'Only pending unpaid, confirmed unpaid, or processing unpaid orders can be cancelled by the customer.'
     };
   }
   return { canCancel: true, fromStatus: order.status };

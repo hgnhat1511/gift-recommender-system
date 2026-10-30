@@ -86,7 +86,10 @@ async function vnpayIpn(req, res, next) {
         const transactionId = String(fields.vnp_TransactionNo || '');
         if (!/^\d{1,15}$/.test(transactionId)) { await connection.rollback(); return ipnReply(res,'99','Invalid transaction reference'); }
         await connection.execute("UPDATE payment_attempts SET status='SUCCEEDED',provider_transaction_id=?,provider_response_code='00',confirmed_at=NOW() WHERE id=? AND status='PENDING'",[transactionId,attempt.id]);
-        await connection.execute("UPDATE orders SET payment_status='PAID' WHERE id=? AND payment_status='UNPAID' AND payment_method='VNPAY'",[order.id]);
+        await connection.execute("UPDATE orders SET payment_status='PAID', status=IF(status IN ('PENDING','CONFIRMED'),'PROCESSING',status) WHERE id=? AND payment_status='UNPAID' AND payment_method='VNPAY'",[order.id]);
+        if (['PENDING','CONFIRMED'].includes(order.status)) {
+            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,'PROCESSING','Thanh toán thành công, tự động chuẩn bị hàng')",[order.id,order.status]);
+        }
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) SELECT user_id,'PAYMENT','Thanh toán thành công',CONCAT('Thanh toán đơn ',order_code,' đã được VNPAY xác nhận.'),id FROM orders WHERE id=?",[order.id]);
         await connection.commit();
         return ipnReply(res,'00','Confirm Success');

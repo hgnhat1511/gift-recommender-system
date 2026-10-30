@@ -149,6 +149,10 @@ export const ORDER_HISTORY_NOTES = Object.freeze({
   'Order placed': 'Khách đặt hàng',
   'Admin updated status': 'Quản trị viên cập nhật trạng thái',
   'Carrier picked up': 'Đơn vị vận chuyển đã lấy hàng',
+
+  // Ghi chú tự động chuyển trạng thái
+  'Kho còn hàng, tự động chuẩn bị hàng': 'Kho còn hàng, tự động chuẩn bị hàng',
+  'Thanh toán thành công, tự động chuẩn bị hàng': 'Thanh toán thành công, tự động chuẩn bị hàng',
 });
 
 export function getOrderHistoryNoteLabel(note) {

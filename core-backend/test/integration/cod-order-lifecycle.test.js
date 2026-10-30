@@ -179,9 +179,9 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
     pSingleUnit = prod4.insertId;
 
     // =========================================================================
-    // TRƯỜNG HỢP 1: COD đủ hàng -> Tạo đơn thành công, CONFIRMED, UNPAID, trừ kho đúng
+    // TRƯỜNG HỢP 1: COD đủ hàng -> Tạo đơn thành công, tự động chuyển PROCESSING, UNPAID, trừ kho đúng
     // =========================================================================
-    await t.test('1. COD đủ hàng: tạo đơn thành công, CONFIRMED, UNPAID, trừ kho đúng', async () => {
+    await t.test('1. COD đủ hàng: tạo đơn thành công, tự động chuyển PROCESSING, UNPAID, trừ kho đúng', async () => {
       const [[stockBefore]] = await pool.query('SELECT stock FROM products WHERE id=?', [pInStock1]);
       assert.equal(Number(stockBefore.stock), 10);
 
@@ -201,13 +201,13 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
         expectStatus: 201,
       });
 
-      assert.equal(orderRes.data.status, 'CONFIRMED');
+      assert.equal(orderRes.data.status, 'PROCESSING');
       assert.equal(orderRes.data.paymentMethod, 'COD');
       const orderId = orderRes.data.orderId;
 
       // Kiểm tra trong DB
       const [[orderDb]] = await pool.query('SELECT * FROM orders WHERE id=?', [orderId]);
-      assert.equal(orderDb.status, 'CONFIRMED');
+      assert.equal(orderDb.status, 'PROCESSING');
       assert.equal(orderDb.payment_status, 'UNPAID');
       assert.equal(orderDb.payment_method, 'COD');
 
@@ -221,11 +221,14 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       assert.equal(Number(movements[0].quantity_delta), -2);
       assert.equal(movements[0].reason, 'Đơn hàng của khách');
 
-      // Kiểm tra order_status_history
-      const [history] = await pool.query('SELECT * FROM order_status_history WHERE order_id=?', [orderId]);
-      assert.equal(history.length, 1);
+      // Kiểm tra order_status_history: có 2 bước: CONFIRMED (Khách đặt hàng) -> PROCESSING (Kho còn hàng)
+      const [history] = await pool.query('SELECT * FROM order_status_history WHERE order_id=? ORDER BY id ASC', [orderId]);
+      assert.equal(history.length, 2);
       assert.equal(history[0].to_status, 'CONFIRMED');
       assert.equal(history[0].note, 'Khách đặt hàng');
+      assert.equal(history[1].from_status, 'CONFIRMED');
+      assert.equal(history[1].to_status, 'PROCESSING');
+      assert.equal(history[1].note, 'Kho còn hàng, tự động chuẩn bị hàng');
 
       // Giỏ hàng món đã chọn bị xóa
       const [cartItems] = await pool.query('SELECT * FROM cart_items WHERE user_id=?', [userAId]);
@@ -433,14 +436,14 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
         body: { addressId: addressAId, paymentMethod: 'COD', shippingMethod: 'STANDARD' },
         expectStatus: 201,
       });
-      assert.equal(codRes.data.status, 'CONFIRMED');
+      assert.equal(codRes.data.status, 'PROCESSING');
       codOrderIdForCancel = codRes.data.orderId;
 
       // Kho: 5 - 2 = 3
       const [[stockAfterOrder]] = await pool.query('SELECT stock FROM products WHERE id=?', [pInStock2]);
       assert.equal(Number(stockAfterOrder.stock), 3);
 
-      // Khách A hủy đơn COD (CONFIRMED + UNPAID)
+      // Khách A hủy đơn COD (PROCESSING + UNPAID, chưa bàn giao shipper)
       const cancelRes = await api(`/orders/${codOrderIdForCancel}/cancel`, {
         method: 'POST',
         auth: tokenA,
@@ -462,14 +465,14 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
         [codOrderIdForCancel]
       );
       assert.equal(hist.length, 1);
-      assert.equal(hist[0].from_status, 'CONFIRMED');
+      assert.equal(hist[0].from_status, 'PROCESSING');
       assert.equal(hist[0].note, 'Khách hủy đơn');
     });
 
     // =========================================================================
-    // TRƯỜNG HỢP 7: Khách hủy PROCESSING -> Bị từ chối
+    // TRƯỜNG HỢP 7: Khách hủy đơn đã bàn giao vận chuyển (SHIPPED) -> Bị từ chối
     // =========================================================================
-    await t.test('7. Khách hủy PROCESSING: bị từ chối', async () => {
+    await t.test('7. Khách hủy đơn đã bàn giao vận chuyển: bị từ chối', async () => {
       await api('/cart/items', {
         method: 'POST',
         auth: tokenA,
@@ -482,27 +485,27 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
         body: { addressId: addressAId, paymentMethod: 'COD', shippingMethod: 'STANDARD' },
         expectStatus: 201,
       });
-      const processingOrderId = orderRes.data.orderId;
+      const shippedOrderId = orderRes.data.orderId;
 
-      // Admin chuyển sang PROCESSING
-      await api(`/admin/orders/${processingOrderId}/status`, {
+      // Admin chuyển sang SHIPPED (bàn giao shipper)
+      await api(`/admin/orders/${shippedOrderId}/status`, {
         method: 'PATCH',
         auth: adminToken,
-        body: { status: 'PROCESSING' },
+        body: { status: 'SHIPPED', note: 'Bàn giao GHN' },
         expectStatus: 200,
       });
 
-      // Khách cố gắng hủy đơn đang xử lý
-      const failCancel = await api(`/orders/${processingOrderId}/cancel`, {
+      // Khách cố gắng hủy đơn đã bàn giao shipper
+      const failCancel = await api(`/orders/${shippedOrderId}/cancel`, {
         method: 'POST',
         auth: tokenA,
         expectStatus: 409,
       });
-      assert.match(failCancel.message, /cancelled by the customer/i);
+      assert.match(failCancel.message, /cancelled by the customer|đơn vị vận chuyển/i);
 
-      // Đơn hàng vẫn giữ nguyên PROCESSING
-      const [[orderDb]] = await pool.query('SELECT status FROM orders WHERE id=?', [processingOrderId]);
-      assert.equal(orderDb.status, 'PROCESSING');
+      // Đơn hàng vẫn giữ nguyên SHIPPED
+      const [[orderDb]] = await pool.query('SELECT status FROM orders WHERE id=?', [shippedOrderId]);
+      assert.equal(orderDb.status, 'SHIPPED');
     });
 
     // =========================================================================
@@ -533,7 +536,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
 
       // Trạng thái đơn của Khách A không đổi
       const [[orderDb]] = await pool.query('SELECT status FROM orders WHERE id=?', [userAOrderId]);
-      assert.equal(orderDb.status, 'CONFIRMED');
+      assert.equal(orderDb.status, 'PROCESSING');
     });
 
     // =========================================================================
@@ -605,9 +608,9 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
     });
 
     // =========================================================================
-    // TRƯỜNG HỢP 11: Admin chuyển CONFIRMED sang PROCESSING
+    // TRƯỜNG HỢP 11: Tự động chuyển CONFIRMED sang PROCESSING khi kho còn hàng
     // =========================================================================
-    await t.test('11. Admin chuyển CONFIRMED sang PROCESSING', async () => {
+    await t.test('11. Tự động chuyển CONFIRMED sang PROCESSING khi kho còn hàng', async () => {
       await api('/cart/items', {
         method: 'POST',
         auth: tokenA,
@@ -622,15 +625,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       });
       orderForFulfillmentId = orderRes.data.orderId;
 
-      // Admin chuyển CONFIRMED -> PROCESSING
-      const patchRes = await api(`/admin/orders/${orderForFulfillmentId}/status`, {
-        method: 'PATCH',
-        auth: adminToken,
-        body: { status: 'PROCESSING', note: 'Kho chuẩn bị hàng đóng gói' },
-        expectStatus: 200,
-      });
-
-      assert.equal(patchRes.data.status, 'PROCESSING');
+      assert.equal(orderRes.data.status, 'PROCESSING');
 
       const [[orderDb]] = await pool.query('SELECT status FROM orders WHERE id=?', [orderForFulfillmentId]);
       assert.equal(orderDb.status, 'PROCESSING');
@@ -642,7 +637,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       );
       assert.equal(hist.length, 1);
       assert.equal(hist[0].from_status, 'CONFIRMED');
-      assert.equal(hist[0].note, 'Kho chuẩn bị hàng đóng gói');
+      assert.equal(hist[0].note, 'Kho còn hàng, tự động chuẩn bị hàng');
     });
 
     // =========================================================================

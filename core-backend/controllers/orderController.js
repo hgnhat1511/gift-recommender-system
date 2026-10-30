@@ -150,10 +150,16 @@ async function create(req, res, next) {
             await connection.execute('UPDATE coupons SET used_count=used_count+1 WHERE id=?', [totals.coupon.id]);
             await connection.execute('INSERT INTO coupon_uses (coupon_id,user_id,order_id,discount_amount) VALUES (?,?,?,?)', [totals.coupon.id,req.user.id,orderId,amount(totals.discountCents)]);
         }
+        let finalStatus = initialStatus;
+        if (paymentMethod === 'COD') {
+            finalStatus = 'PROCESSING';
+            await connection.execute("UPDATE orders SET status='PROCESSING' WHERE id=?", [orderId]);
+            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,'CONFIRMED','PROCESSING','Kho còn hàng, tự động chuẩn bị hàng')", [orderId]);
+        }
         await connection.execute('DELETE FROM cart_items WHERE user_id=? AND is_selected=1', [req.user.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận. Phương thức thanh toán: ${paymentMethod}.`,orderId]);
         await connection.commit();
-        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:initialStatus,paymentMethod,shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
+        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:finalStatus,paymentMethod,shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
     } catch (error) {
         await connection.rollback();
         if(error.code==='ER_DUP_ENTRY'&&requestKey){
@@ -280,6 +286,18 @@ async function cancelMine(req,res,next){
         const order=orders[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
         const check=canCustomerCancel(order);
         if(!check.canCancel){await connection.rollback();return res.status(check.status).json({success:false,message:check.message})}
+        if (order.shipping_carrier) {
+            await connection.rollback();
+            return res.status(409).json({success:false,message:'Đơn hàng đã được bàn giao cho đơn vị vận chuyển, không thể tự hủy.'});
+        }
+        const [[activeShipment]] = await connection.execute(
+            "SELECT id FROM shipments WHERE order_id=? AND status NOT IN ('FAILED','CANCELLED') LIMIT 1",
+            [order.id]
+        );
+        if (activeShipment) {
+            await connection.rollback();
+            return res.status(409).json({success:false,message:'Đơn hàng đã được bàn giao cho đơn vị vận chuyển, không thể tự hủy.'});
+        }
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,check.fromStatus,'CANCELLED','Khách hủy đơn']);
