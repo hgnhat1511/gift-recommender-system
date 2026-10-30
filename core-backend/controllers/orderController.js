@@ -113,13 +113,15 @@ async function create(req, res, next) {
         if (totals.error) { await connection.rollback(); return res.status(409).json({ success:false,message:totals.error,data:totals.data }); }
         const orderCode = `GL${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         const address = totals.address;
+        const initialStatus = paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING';
         const [created] = await connection.execute(`INSERT INTO orders
             (order_code,idempotency_key,user_id,status,payment_method,shipping_method,payment_status,recipient_name,phone,shipping_address,customer_note,coupon_code,subtotal,discount_amount,shipping_fee,total_amount)
-            VALUES (?,?,?, 'PENDING',?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
-            [orderCode,requestKey,req.user.id,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
+            VALUES (?,?,?,?,?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
+            [orderCode,requestKey,req.user.id,initialStatus,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
         const orderId = created.insertId;
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,'PENDING','Khách đặt hàng']);
-        for (const item of totals.items) {
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,initialStatus,'Khách đặt hàng']);
+        const sortedItems = [...totals.items].sort((a, b) => Number(a.product_id) - Number(b.product_id));
+        for (const item of sortedItems) {
             const [updated] = await connection.execute('UPDATE products SET stock=stock-? WHERE id=? AND status=\'ACTIVE\' AND stock>=?', [item.quantity,item.product_id,item.quantity]);
             if (updated.affectedRows !== 1) {
                 const [freshProducts] = await connection.execute('SELECT name, stock, status FROM products WHERE id=?', [item.product_id]);
@@ -151,7 +153,7 @@ async function create(req, res, next) {
         await connection.execute('DELETE FROM cart_items WHERE user_id=? AND is_selected=1', [req.user.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận. Phương thức thanh toán: ${paymentMethod}.`,orderId]);
         await connection.commit();
-        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:'PENDING',paymentMethod,shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
+        return res.status(201).json({ success:true,message:'Order placed.',data:{ orderId:String(orderId),orderCode,status:initialStatus,paymentMethod,shippingMethod:totals.shippingMethod,total:amount(totals.totalCents) } });
     } catch (error) {
         await connection.rollback();
         if(error.code==='ER_DUP_ENTRY'&&requestKey){
@@ -288,7 +290,7 @@ async function cancelMine(req,res,next){
 }
 
 async function restoreStock(connection,orderId,userId){
-    const [items]=await connection.execute('SELECT product_id,quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL',[orderId]);
+    const [items]=await connection.execute('SELECT product_id,quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL ORDER BY product_id ASC',[orderId]);
     for(const item of items){await connection.execute('UPDATE products SET stock=stock+? WHERE id=?',[item.quantity,item.product_id]);await connection.execute("INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,'Hủy đơn; hoàn tồn kho',?)",[item.product_id,userId,item.quantity,orderId])}
 }
 

@@ -19,18 +19,21 @@ describe('Khu vực 2: Kiểm soát tồn kho, lý do tiếng Việt và điều
     assert.equal(result.fromStatus, 'PENDING');
   });
 
-  test('2. Đơn CONFIRMED + UNPAID: Khách hàng KHÔNG được hủy trực tiếp -> 409 (phải qua admin)', () => {
+  test('2. Đơn CONFIRMED + UNPAID (đơn COD vừa đặt): Khách hàng được phép hủy', () => {
     const order = { id: 2, status: 'CONFIRMED', payment_status: 'UNPAID' };
     const result = canCustomerCancel(order);
-    assert.equal(result.canCancel, false);
-    assert.equal(result.status, 409);
+    assert.equal(result.canCancel, true);
+    assert.equal(result.fromStatus, 'CONFIRMED');
   });
 
   test('3. Đơn đã thanh toán (PAID): Khách hàng không được hủy trực tiếp -> 409', () => {
-    const order = { id: 3, status: 'PENDING', payment_status: 'PAID' };
-    const result = canCustomerCancel(order);
-    assert.equal(result.canCancel, false);
-    assert.equal(result.status, 409);
+    const pendingPaid = { id: 3, status: 'PENDING', payment_status: 'PAID' };
+    assert.equal(canCustomerCancel(pendingPaid).canCancel, false);
+    assert.equal(canCustomerCancel(pendingPaid).status, 409);
+
+    const confirmedPaid = { id: 4, status: 'CONFIRMED', payment_status: 'PAID' };
+    assert.equal(canCustomerCancel(confirmedPaid).canCancel, false);
+    assert.equal(canCustomerCancel(confirmedPaid).status, 409);
   });
 
   test('4. Đơn PROCESSING / SHIPPED / DELIVERED: Khách hàng không được hủy -> 409', () => {
