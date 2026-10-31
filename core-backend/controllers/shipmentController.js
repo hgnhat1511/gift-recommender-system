@@ -51,10 +51,14 @@ async function createGhnShipment(req,res,next) {
             return res.status(409).json({success:false,message:'Only a processing order that is paid or COD can be dispatched.'});
         }
         order=lockedOrder;
-        let [[existingShipment]]=await connection1.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1 FOR UPDATE",[order.id]);
+        let [[existingShipment]]=await connection1.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status,updated_at<=NOW() - INTERVAL 5 MINUTE AS is_stale FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1 FOR UPDATE",[order.id]);
         if(existingShipment&&existingShipment.status!=='CREATING'&&existingShipment.status!=='FAILED'){
             await connection1.commit();
             return res.status(200).json({success:true,data:existingShipment});
+        }
+        if(existingShipment&&existingShipment.status==='CREATING'&&Number(existingShipment.is_stale)===0){
+            await connection1.rollback();
+            return res.status(409).json({success:false,message:'Vận đơn đang trong quá trình tạo với đơn vị vận chuyển. Vui lòng thử lại sau.'});
         }
         existing=existingShipment;
         address=typeof order.shipping_address==='string'?JSON.parse(order.shipping_address):order.shipping_address;
@@ -72,7 +76,7 @@ async function createGhnShipment(req,res,next) {
                 if(existing&&existing.status!=='CREATING'&&existing.status!=='FAILED'){await connection1.commit();return res.json({success:true,data:existing})}
             }
         }else{
-            await connection1.execute("UPDATE shipments SET status='CREATING' WHERE id=? AND status='FAILED'",[existing.id]);
+            await connection1.execute("UPDATE shipments SET status='CREATING',updated_at=NOW() WHERE id=? AND status IN ('FAILED','CREATING')",[existing.id]);
         }
         await connection1.commit();
     }catch(error){await connection1.rollback();return next(error)}finally{connection1.release()}
@@ -93,16 +97,37 @@ async function createGhnShipment(req,res,next) {
         await connection2.beginTransaction();
         const [[current]]=await connection2.execute('SELECT id,status,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[order.id]);
         if(!current||current.status!=='PROCESSING'){
+            let cancelOk=false;
+            let cancelError=null;
             try{
                 if(typeof ghn.cancelOrder==='function'){
-                    await ghn.cancelOrder({orderCodes:[providerResult.orderCode]},config);
+                    cancelOk=await ghn.cancelOrder({orderCodes:[providerResult.orderCode]},config);
                 }
             }catch(cancelErr){
+                cancelError=cancelErr;
                 console.warn('Could not auto-cancel GHN order on provider:',cancelErr.message);
             }
             await connection2.execute("UPDATE shipments SET provider_order_code=?,tracking_number=?,status='CANCELLED' WHERE id=?",[providerResult.orderCode,providerResult.orderCode,existing.id]);
+            const auditAction=cancelOk?'SHIPMENT_ABORTED':'SHIPMENT_CANCEL_FAILED';
+            const auditDetails={
+                provider:'GHN',
+                trackingNumber:providerResult.orderCode,
+                orderStatus:current?.status||'UNKNOWN',
+                autoCancelSuccess:Boolean(cancelOk),
+                error:cancelError?cancelError.message:null,
+                manualActionRequired:!cancelOk
+            };
+            await connection2.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,auditAction,'order',order.id,JSON.stringify(auditDetails)]);
+            const historyNote=cancelOk
+                ?`Đơn hàng đã đổi trạng thái (${current?.status||'CANCELLED'}). Vận đơn GHN đã được tự động hủy.`
+                :`Đơn hàng đã đổi trạng thái (${current?.status||'CANCELLED'}) nhưng tự động hủy GHN thất bại: ${cancelError?.message||'Lỗi không xác định'}. Cần hủy thủ công trên portal GHN.`;
+            await connection2.execute('INSERT INTO order_shipping_history (order_id,changed_by,carrier,tracking_number,note) VALUES (?,?,\'GHN\',?,?)',[order.id,req.user.id,providerResult.orderCode,historyNote]);
             await connection2.commit();
-            return res.status(409).json({success:false,message:'Order status changed while creating the shipment. GHN shipment was aborted.'});
+            return res.status(409).json({
+                success:false,
+                message:'Order status changed while creating the shipment. GHN shipment was aborted.',
+                manualActionRequired:!cancelOk
+            });
         }
         await connection2.execute("UPDATE shipments SET provider_order_code=?,tracking_number=?,status=IF(status='CREATING','CREATED',status) WHERE id=?",[providerResult.orderCode,providerResult.orderCode,existing.id]);
         if(current.shipping_carrier!=='GHN'||current.tracking_number!==providerResult.orderCode){

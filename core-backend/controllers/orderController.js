@@ -291,12 +291,18 @@ async function cancelMine(req,res,next){
             return res.status(409).json({success:false,message:'Đơn hàng đã được bàn giao cho đơn vị vận chuyển, không thể tự hủy.'});
         }
         const [[activeShipment]] = await connection.execute(
-            "SELECT id FROM shipments WHERE order_id=? AND status NOT IN ('FAILED','CANCELLED') LIMIT 1",
+            "SELECT id,status,updated_at<=NOW() - INTERVAL 5 MINUTE AS is_stale FROM shipments WHERE order_id=? AND status NOT IN ('FAILED','CANCELLED') LIMIT 1",
             [order.id]
         );
         if (activeShipment) {
-            await connection.rollback();
-            return res.status(409).json({success:false,message:'Đơn hàng đã được bàn giao cho đơn vị vận chuyển, không thể tự hủy.'});
+            if (activeShipment.status === 'CREATING' && Number(activeShipment.is_stale) === 1) {
+                await connection.execute("UPDATE shipments SET status='FAILED' WHERE id=?", [activeShipment.id]);
+                await connection.execute('INSERT INTO order_shipping_history (order_id,changed_by,carrier,tracking_number,note) VALUES (?,?,?,?,?)',
+                    [order.id, req.user.id, 'GHN', 'N/A', 'Vận đơn CREATING kẹt quá 5 phút đã hết hạn, tự động đánh dấu FAILED']);
+            } else {
+                await connection.rollback();
+                return res.status(409).json({success:false,message:'Đơn hàng đã được bàn giao cho đơn vị vận chuyển, không thể tự hủy.'});
+            }
         }
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);

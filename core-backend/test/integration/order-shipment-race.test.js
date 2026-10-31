@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 
 const testDatabase = (process.env.TEST_DB_NAME || 'giftly_verification_test').trim();
 
-test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủy đơn và Chặn VNPAY chưa thanh toán', {
+test('Khu vực 2i & 2j: Race condition Vận đơn GHN, Bù trừ Pha 3, Hết hạn CREATING và Chặn VNPAY chưa thanh toán', {
   skip: testDatabase ? false : 'Set TEST_DB_NAME to giftly_verification_test'
 }, async (t) => {
   assert.match(testDatabase, /^giftly_[a-z0-9_]*_test$/i, 'Test bắt buộc phải chạy trên database test chuyên biệt');
@@ -37,12 +37,13 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
   // Mock GHN network requests qua globalThis.fetch
   const originalFetch = globalThis.fetch;
   const ghnMockCalls = { creates: 0, cancels: 0 };
+  let mockCancelShouldFail = false;
   globalThis.fetch = async (url, options = {}) => {
     const urlStr = String(url);
     if (urlStr.includes('/v2/shipping-order/create')) {
       ghnMockCalls.creates++;
-      // Tạo độ trễ nhân tạo nhỏ (25ms) để mô phỏng thời gian gọi mạng GHN
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      // Tạo độ trễ nhân tạo 35ms để mô phỏng thời gian gọi mạng GHN
+      await new Promise((resolve) => setTimeout(resolve, 35));
       return {
         ok: true,
         status: 200,
@@ -59,6 +60,9 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
     }
     if (urlStr.includes('/v2/switch-status/cancel')) {
       ghnMockCalls.cancels++;
+      if (mockCancelShouldFail) {
+        throw new Error('GHN cancel provider connection timeout');
+      }
       return {
         ok: true,
         status: 200,
@@ -198,11 +202,9 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
       for (let i = 0; i < iterations; i++) {
         const orderId = await createProcessingCodOrder();
 
-        // Kiểm tra ban đầu là PROCESSING
         const [[initialOrder]] = await pool.query('SELECT status, shipping_carrier FROM orders WHERE id=?', [orderId]);
         assert.equal(initialOrder.status, 'PROCESSING');
 
-        // Chạy đồng thời Khách hủy và Admin tạo vận đơn GHN
         const [cancelRes, shipmentRes] = await Promise.all([
           api(`/orders/${orderId}/cancel`, { method: 'POST', auth: tokenA }),
           api(`/admin/orders/${orderId}/shipments/ghn`, {
@@ -212,7 +214,6 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
           }),
         ]);
 
-        // Kiểm tra tính nhất quán trong DB sau race
         const [[finalOrder]] = await pool.query(
           'SELECT status, shipping_carrier, tracking_number FROM orders WHERE id=?',
           [orderId]
@@ -222,21 +223,17 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
           [orderId]
         );
 
-        // Đảm bảo không có vận đơn ở trạng thái dở dang CREATING
         for (const s of shipments) {
           assert.notEqual(s.status, 'CREATING', `Lần lặp ${i}: Vận đơn không được bị kẹt ở CREATING`);
         }
 
-        // Kết quả cuối cùng chỉ được là một trong hai trạng thái hợp lệ:
         if (finalOrder.status === 'PROCESSING') {
-          // Admin thắng: Vận đơn thành công (201), khách hủy bị từ chối (409)
           assert.equal(shipmentRes.status, 201, `Admin tạo vận đơn phải trả về 201 (got ${shipmentRes.status})`);
           assert.equal(cancelRes.status, 409, `Khách hủy sau khi đã có vận đơn phải bị chặn 409 (got ${cancelRes.status})`);
           assert.equal(finalOrder.shipping_carrier, 'GHN');
           assert.ok(shipments.length >= 1);
           assert.equal(shipments[0].status, 'CREATED');
         } else if (finalOrder.status === 'CANCELLED') {
-          // Khách thắng: Đơn đã hủy (200), admin tạo vận đơn bị từ chối (409)
           assert.equal(cancelRes.status, 200, `Khách hủy thành công phải trả về 200 (got ${cancelRes.status})`);
           assert.equal(shipmentRes.status, 409, `Admin tạo vận đơn cho đơn đã hủy phải nhận 409 (got ${shipmentRes.status})`);
           if (shipments.length > 0) {
@@ -246,6 +243,165 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
           assert.fail(`Trạng thái đơn không hợp lệ sau race: ${finalOrder.status}`);
         }
       }
+    });
+
+    // =========================================================================
+    // YÊU CẦU 2j-1: Bù trừ Pha 3 - Admin hủy đơn đồng thời với Admin tạo vận đơn
+    //               Kiểm tra cancelOrder được gọi đúng 1 lần, shipments CANCELLED
+    // =========================================================================
+    await t.test('2j-1. Bù trừ Pha 3: Admin hủy đơn khi đang tạo vận đơn -> cancelOrder được gọi, shipment CANCELLED', async () => {
+      mockCancelShouldFail = false;
+      const initialCancels = ghnMockCalls.cancels;
+      const orderId = await createProcessingCodOrder();
+
+      // Bắt đầu tạo vận đơn (GHN mạng mock trễ 35ms)
+      const shipmentPromise = api(`/admin/orders/${orderId}/shipments/ghn`, {
+        method: 'POST',
+        auth: adminToken,
+        body: { weightGrams: 500, lengthCm: 20, widthCm: 15, heightCm: 10 },
+      });
+
+      // Admin lập tức hủy đơn hàng trong khi GHN call đang in-flight
+      await new Promise((r) => setTimeout(r, 10));
+      const cancelRes = await api(`/admin/orders/${orderId}/status`, {
+        method: 'PATCH',
+        auth: adminToken,
+        body: { status: 'CANCELLED', note: 'Admin chủ động hủy đơn trong khi chuẩn bị giao' },
+        expectStatus: 200,
+      });
+      assert.equal(cancelRes.status, 200);
+
+      const shipmentRes = await shipmentPromise;
+      // Nhánh Pha 3 phát hiện đơn không còn PROCESSING -> abort & bù trừ -> trả về 409
+      assert.equal(shipmentRes.status, 409);
+      assert.match(shipmentRes.message, /Order status changed while creating the shipment/);
+
+      // Kiểm tra cancelOrder của GHN được gọi đúng 1 lần
+      assert.equal(ghnMockCalls.cancels, initialCancels + 1, 'cancelOrder phải được gọi chính xác 1 lần');
+
+      // Kiểm tra trạng thái DB
+      const [[finalOrder]] = await pool.query('SELECT status FROM orders WHERE id=?', [orderId]);
+      assert.equal(finalOrder.status, 'CANCELLED');
+
+      const [shipments] = await pool.query('SELECT * FROM shipments WHERE order_id=?', [orderId]);
+      assert.equal(shipments.length, 1);
+      assert.equal(shipments[0].status, 'CANCELLED', 'Shipment phải chuyển thành CANCELLED');
+      assert.ok(shipments[0].provider_order_code, 'Phải lưu provider_order_code để đối soát');
+
+      // Kiểm tra ghi audit log và shipping history
+      const [auditLogs] = await pool.query(
+        "SELECT action, details FROM admin_audit_logs WHERE entity_id=? AND action='SHIPMENT_ABORTED'",
+        [orderId]
+      );
+      assert.equal(auditLogs.length, 1, 'Phải ghi audit log SHIPMENT_ABORTED');
+
+      const [shipHist] = await pool.query(
+        'SELECT * FROM order_shipping_history WHERE order_id=? ORDER BY id DESC LIMIT 1',
+        [orderId]
+      );
+      assert.equal(shipHist.length, 1);
+      assert.match(shipHist[0].note, /Vận đơn GHN đã được tự động hủy/);
+    });
+
+    // =========================================================================
+    // YÊU CẦU 2j-2: cancelOrder thất bại / timeout khi bù trừ
+    //               Ghi nhận SHIPMENT_CANCEL_FAILED & manualActionRequired vào audit/history
+    // =========================================================================
+    await t.test('2j-2. Bù trừ Pha 3 thất bại (GHN timeout/lỗi): ghi nhận audit log và shipping history để xử lý tay', async () => {
+      mockCancelShouldFail = true;
+      const orderId = await createProcessingCodOrder();
+
+      const shipmentPromise = api(`/admin/orders/${orderId}/shipments/ghn`, {
+        method: 'POST',
+        auth: adminToken,
+        body: { weightGrams: 500, lengthCm: 20, widthCm: 15, heightCm: 10 },
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+      await api(`/admin/orders/${orderId}/status`, {
+        method: 'PATCH',
+        auth: adminToken,
+        body: { status: 'CANCELLED', note: 'Admin hủy test bù trừ lỗi' },
+        expectStatus: 200,
+      });
+
+      const shipmentRes = await shipmentPromise;
+      assert.equal(shipmentRes.status, 409);
+      assert.equal(shipmentRes.body.manualActionRequired, true, 'Phải cắm cờ manualActionRequired');
+
+      // Kiểm tra audit log
+      const [auditLogs] = await pool.query(
+        "SELECT action, details FROM admin_audit_logs WHERE entity_id=? AND action='SHIPMENT_CANCEL_FAILED'",
+        [orderId]
+      );
+      assert.equal(auditLogs.length, 1, 'Phải ghi audit log SHIPMENT_CANCEL_FAILED');
+      const details = typeof auditLogs[0].details === 'string' ? JSON.parse(auditLogs[0].details) : auditLogs[0].details;
+      assert.equal(details.manualActionRequired, true);
+      assert.match(details.error, /GHN cancel provider connection timeout/);
+
+      // Kiểm tra shipping history
+      const [shipHist] = await pool.query(
+        'SELECT * FROM order_shipping_history WHERE order_id=? ORDER BY id DESC LIMIT 1',
+        [orderId]
+      );
+      assert.equal(shipHist.length, 1);
+      assert.match(shipHist[0].note, /Cần hủy thủ công trên portal GHN/);
+
+      mockCancelShouldFail = false;
+    });
+
+    // =========================================================================
+    // YÊU CẦU 2j-3: Xử lý vận đơn kẹt CREATING
+    //               - CREATING kẹt quá 5 phút (stale): Khách được tự hủy, shipment -> FAILED
+    //               - CREATING mới tạo (< 5 phút): Khách & Admin dispatch thứ hai bị chặn 409
+    // =========================================================================
+    await t.test('2j-3. Vận đơn kẹt CREATING: stale (>5 phút) giải phóng cho khách hủy; recent (<5 phút) chặn 409', async () => {
+      // 1. Trường hợp stale CREATING (> 5 phút, ví dụ tiến trình chết hoặc timeout cũ)
+      const staleOrderId = await createProcessingCodOrder();
+      await pool.execute(
+        "INSERT INTO shipments (order_id, client_order_code, provider, status, updated_at) VALUES (?, ?, 'GHN', 'CREATING', NOW() - INTERVAL 10 MINUTE)",
+        [staleOrderId, `STALE-${Date.now()}`]
+      );
+
+      // Khách hàng gửi yêu cầu hủy đơn -> Phải được xử lý thành công, tự động đánh dấu shipment FAILED
+      const cancelStaleRes = await api(`/orders/${staleOrderId}/cancel`, {
+        method: 'POST',
+        auth: tokenA,
+        expectStatus: 200,
+      });
+      assert.equal(cancelStaleRes.status, 200);
+
+      const [[staleOrderDb]] = await pool.query('SELECT status FROM orders WHERE id=?', [staleOrderId]);
+      assert.equal(staleOrderDb.status, 'CANCELLED');
+
+      const [[staleShipmentDb]] = await pool.query('SELECT status FROM shipments WHERE order_id=?', [staleOrderId]);
+      assert.equal(staleShipmentDb.status, 'FAILED', 'Stale CREATING phải được chuyển thành FAILED để không kẹt');
+
+      // 2. Trường hợp recent CREATING (< 5 phút, đang trong quá trình tạo)
+      const recentOrderId = await createProcessingCodOrder();
+      await pool.execute(
+        "INSERT INTO shipments (order_id, client_order_code, provider, status, updated_at) VALUES (?, ?, 'GHN', 'CREATING', NOW())",
+        [recentOrderId, `RECENT-${Date.now()}`]
+      );
+
+      // Khách hàng hủy -> Bị chặn 409
+      const cancelRecentRes = await api(`/orders/${recentOrderId}/cancel`, {
+        method: 'POST',
+        auth: tokenA,
+        expectStatus: 409,
+      });
+      assert.equal(cancelRecentRes.status, 409);
+      assert.match(cancelRecentRes.message, /không thể tự hủy/);
+
+      // Admin thứ hai gửi request tạo vận đơn trùng lặp -> Bị chặn 409
+      const dupShipmentRes = await api(`/admin/orders/${recentOrderId}/shipments/ghn`, {
+        method: 'POST',
+        auth: adminToken,
+        body: { weightGrams: 500, lengthCm: 20, widthCm: 15, heightCm: 10 },
+        expectStatus: 409,
+      });
+      assert.equal(dupShipmentRes.status, 409);
+      assert.match(dupShipmentRes.message, /Vận đơn đang trong quá trình tạo/);
     });
 
     // =========================================================================
@@ -327,10 +483,7 @@ test('Khu vực 2i: Race condition Vận đơn GHN, Hết hạn attempt khi hủ
       assert.equal(ipnJson.RspCode, '00');
       assert.equal(ipnJson.Message, 'Payment received and flagged for review');
 
-      // Kiểm tra DB sau IPN:
-      // - payment_attempts chuyển thành REVIEW
-      // - Đơn hàng VẪN GIỮ NGUYÊN là CANCELLED (không bị chuyển sang PROCESSING)
-      // - Ghi nhận admin audit log với hành động PAYMENT_REVIEW
+      // Kiểm tra DB sau IPN
       const [[attemptAfterIpn]] = await pool.query(
         "SELECT status, provider_transaction_id, provider_response_code FROM payment_attempts WHERE reference=?",
         [txnRef]
