@@ -8,7 +8,9 @@ const present = (row) => row && ({
     status: row.status, occasionTags: row.occasion_tags || [], recipientTags: row.recipient_tags || [],
     interestTags: row.interest_tags || [], style: row.style, giftType: row.gift_type,
     isFeatured: Boolean(row.is_featured), averageRating: Number(row.average_rating || 0),
-    reviewCount: Number(row.review_count || 0), createdAt: row.created_at
+    reviewCount: Number(row.review_count || 0), createdAt: row.created_at,
+    mlProductId: row.ml_product_id != null ? Number(row.ml_product_id) : null,
+    isSyntheticDisplay: Boolean(row.is_synthetic_display)
 });
 
 function getNumber(value, fallback) {
@@ -107,7 +109,15 @@ async function recommendations(req,res,next){
     if(!Number.isInteger(limit)||limit<1||limit>20)return res.status(400).json({success:false,message:'Recommendation limit must be between 1 and 20.'});
     try{
         const result=await recommendProducts(req.user?.id||null,limit);
-        return res.json({success:true,data:{method:result.method,total:result.total,items:result.items.map(({product,reasons})=>({...present(product),reasons}))}});
+        return res.json({
+            success: true,
+            data: {
+                method: result.method,
+                source: result.source,
+                total: result.total,
+                items: result.items.map(({ product, reasons }) => ({ ...present(product), reasons }))
+            }
+        });
     }catch(error){return next(error)}
 }
 

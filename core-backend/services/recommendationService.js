@@ -45,6 +45,28 @@ function applyMlRanking(ranked, response) {
     return items;
 }
 
+function applyMlRankerMapping(ranked, response) {
+    if (!Array.isArray(response?.items)) return null;
+    const byMlId = new Map();
+    for (const item of ranked) {
+        const key = String(item.product.ml_product_id ?? item.product.id);
+        byMlId.set(key, item.product);
+    }
+    const seen = new Set();
+    const items = [];
+    for (const result of response.items) {
+        const id = String(result?.id || '');
+        if (!byMlId.has(id) || seen.has(id)) continue;
+        seen.add(id);
+        const reasons = Array.isArray(result.reasons) ? result.reasons : [];
+        items.push({
+            product: byMlId.get(id),
+            reasons: reasons.length ? reasons : ['Gợi ý từ mô hình học máy LC-1']
+        });
+    }
+    return items;
+}
+
 async function askMlRanking(path, ranked, payload) {
     const base=process.env.ML_SERVICE_URL;
     if(!base)return null;
@@ -57,6 +79,51 @@ async function askMlRanking(path, ranked, payload) {
         const result=await response.json();
         return applyMlRanking(ranked,result);
     }catch{return null}finally{clearTimeout(timer)}
+}
+
+async function askMlRanker(userId, ranked, limit) {
+    const base = process.env.ML_SERVICE_URL;
+    if (!base) return null;
+    const timeout = Math.max(100, Math.min(5000, Number(process.env.ML_SERVICE_TIMEOUT_MS) || 1500));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const validCandidates = ranked.filter(item => {
+            const mlId = item.product.ml_product_id ?? item.product.id;
+            return Number.isInteger(Number(mlId));
+        });
+
+        if (validCandidates.length === 0) {
+            return { items: [], source: 'unknown_candidates' };
+        }
+
+        const candidateIds = validCandidates.map(item => Number(item.product.ml_product_id ?? item.product.id));
+
+        const payload = {
+            user_id: Number.isInteger(Number(userId)) ? Number(userId) : null,
+            top_k: limit,
+            candidate_ids: candidateIds
+        };
+        const response = await fetch(new URL('/recommend/rank', base), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        if (!response.ok) return null;
+        const result = await response.json();
+        const source = result?.source || 'unknown_candidates';
+        if (source === 'unknown_candidates') {
+            return { items: [], source: 'unknown_candidates' };
+        }
+        const items = applyMlRankerMapping(validCandidates, result);
+        if (!items || items.length === 0) return null;
+        return { items, source };
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function askMlService(ranked, profile, limit) {
@@ -242,13 +309,48 @@ async function recommendProducts(userId, limit) {
         product,
         reasons: reasons.length ? reasons : ['Sản phẩm còn hàng trong danh mục']
     }));
-    const pythonItems=await askMlService(ranked,profile,limit);
+
+    // 1. Thử gọi Ranker LC-1 (FastAPI) phục vụ xếp hạng thời gian thực
+    let mlUserId = null;
+    if (userId) {
+        try {
+            const [userRows] = await pool.execute('SELECT ml_user_id FROM users WHERE id = ? LIMIT 1', [userId]);
+            if (userRows.length && userRows[0].ml_user_id != null) {
+                mlUserId = Number(userRows[0].ml_user_id);
+            }
+        } catch {
+            mlUserId = null;
+        }
+    }
+
+    const rankerRes = await askMlRanker(mlUserId, ranked, limit);
+    if (rankerRes && Array.isArray(rankerRes.items) && rankerRes.items.length > 0 && (rankerRes.source === 'ranker_lc1' || rankerRes.source === 'popularity_fallback')) {
+        return {
+            method: isPersonalized ? 'personalized_activity' : 'popular_cold_start',
+            items: rankerRes.items,
+            total: rankerRes.items.length,
+            source: rankerRes.source
+        };
+    }
+
+    // 2. Fallback sang Python rule/TF-IDF hoặc Node rule-based khi ML lỗi hoặc chậm
+    const pythonItems = await askMlService(ranked, profile, limit);
+    const chosenSource = resolveRecommendationSource(rankerRes, pythonItems);
     return {
         method: isPersonalized ? 'personalized_activity' : 'popular_cold_start',
-        items:pythonItems||items,
-        total:pythonItems?pythonItems.length:items.length,
-        source:pythonItems?'python_content_baseline':'node_fallback'
+        items: pythonItems || items,
+        total: pythonItems ? pythonItems.length : items.length,
+        source: chosenSource
     };
 }
 
-module.exports = { recommendProducts,mlPayload,applyMlRanking,askMlService,askMlGiftFinder };
+function resolveRecommendationSource(rankerRes, pythonItems) {
+    if (rankerRes && Array.isArray(rankerRes.items) && rankerRes.items.length > 0) {
+        if (rankerRes.source === 'ranker_lc1' || rankerRes.source === 'popularity_fallback') {
+            return rankerRes.source;
+        }
+    }
+    return pythonItems ? 'python_content_baseline' : 'node_fallback';
+}
+
+module.exports = { recommendProducts, mlPayload, applyMlRanking, askMlService, askMlGiftFinder, askMlRanker, resolveRecommendationSource };

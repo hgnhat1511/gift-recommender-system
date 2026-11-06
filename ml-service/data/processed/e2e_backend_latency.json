@@ -1,0 +1,9 @@
+{
+  "num_requests": 200,
+  "mean_ms": 18.29,
+  "p50_ms": 16.02,
+  "p95_ms": 36.19,
+  "p99_ms": 40.03,
+  "fastapi_p95_ms": 6.57,
+  "all_passed": true
+}

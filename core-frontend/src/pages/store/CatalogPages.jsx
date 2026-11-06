@@ -9,7 +9,7 @@ import { money, occasions, recipients, interests, styles, giftTypes, formatReaso
 import './commerce.css';
 
 
-export function ProductCard({ product, onChange, recommendationSource }) {
+export function ProductCard({ product, onChange, recommendationSource, isRanker }) {
   const [busy,setBusy]=useState(false);const [error,setError]=useState('');
   function trackRecommendationClick(){
     if(recommendationSource)api.post('/products/events',{productId:product.id,eventType:'RECOMMENDATION_CLICK',context:{source:recommendationSource}}).catch(()=>{});
@@ -28,7 +28,7 @@ export function ProductCard({ product, onChange, recommendationSource }) {
     <Link to={`/products/${product.id}`} className="commerce-product-image" onClick={trackRecommendationClick}><img src={product.imageUrl||'/icons.svg'} alt={product.name} loading="lazy"/><span>{product.stock>0?product.category:'Tạm hết hàng'}</span></Link>
     <div className="commerce-product-content"><small>{product.category||'Giftly'}</small><Link to={`/products/${product.id}`} className="commerce-product-name" onClick={trackRecommendationClick}>{product.name}</Link>
       <div className="commerce-product-rating"><Star size={14} fill="currentColor"/><b>{product.reviewCount?Number(product.averageRating).toFixed(1):'Mới'}</b><span>({product.reviewCount||0})</span></div>
-      <strong>{money(product.price)}</strong>{product.reasons?.length>0&&<ul className="commerce-reasons recommendation-reasons">{product.reasons.slice(0,2).map(reason=><li key={reason}>{formatReasonLabel(reason)}</li>)}</ul>}<button className="commerce-button commerce-button-small" onClick={add} disabled={busy||product.stock<1}><ShoppingBag size={15}/>{busy?'Đang thêm…':product.stock<1?'Hết hàng':'Thêm vào giỏ'}</button>
+      <strong>{money(product.price)}</strong>{isRanker&&product.reasons?.length>0&&<ul className="commerce-reasons recommendation-reasons">{product.reasons.slice(0,2).map(reason=><li key={reason}>{formatReasonLabel(reason)}</li>)}</ul>}<button className="commerce-button commerce-button-small" onClick={add} disabled={busy||product.stock<1}><ShoppingBag size={15}/>{busy?'Đang thêm…':product.stock<1?'Hết hàng':'Thêm vào giỏ'}</button>
       {error&&<span className="commerce-inline-error">{error}</span>}</div>
   </article>
 }

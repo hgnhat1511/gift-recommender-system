@@ -11,6 +11,7 @@
 *.pyc
 *.pkl
 *.joblib
+*.parquet
 **/coverage/
 **/*.log
 **/.pytest_cache/

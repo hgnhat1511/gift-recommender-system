@@ -22,6 +22,63 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: gift_ml_service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    volumes:
+      - ./ml-service/models:/app/models:ro
+      - ./ml-service/data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - redis-cache
+
+  core-backend:
+    build:
+      context: ./core-backend
+      dockerfile: Dockerfile
+    container_name: gift_core_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DB_HOST=mysql-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - DB_NAME=gift_ecommerce
+      - REDIS_URL=redis://redis-cache:6379
+      - ML_SERVICE_URL=http://ml-service:8000
+      - ML_SERVICE_TIMEOUT_MS=1500
+    depends_on:
+      - mysql-db
+      - redis-cache
+      - ml-service
+
+  core-frontend:
+    build:
+      context: ./core-frontend
+      dockerfile: Dockerfile
+    container_name: gift_core_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://core-backend:5000
+    depends_on:
+      - core-backend
+
 volumes:
   mysql_data:
   redis_data:

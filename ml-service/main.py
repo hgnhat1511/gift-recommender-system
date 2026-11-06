@@ -1,11 +1,49 @@
-from typing import Any
+# -*- coding: utf-8 -*-
+from contextlib import asynccontextmanager
+from typing import Any, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.services.ranker_service import RankerService
 from app.services.recommender import MODEL_VERSION, recommend, similar
 
-app = FastAPI(title="Giftly Recommendation Service", version=MODEL_VERSION)
+# Biến dịch vụ toàn cục nạp một lần lúc khởi động
+ranker_service: Optional[RankerService] = None
+
+
+def init_service(
+    model_path: str = "models/ranker_best_model.pkl",
+    data_path: str = "data/processed/ranker_val_full.parquet",
+) -> RankerService:
+    global ranker_service
+    if ranker_service is None:
+        ranker_service = RankerService(model_path=model_path, data_path=data_path)
+    return ranker_service
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_service()
+    yield
+
+
+app = FastAPI(
+    title="Giftly Recommendation Service",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+
+# ============================================================================
+# Request / Response Schemas
+# ============================================================================
+
+class RankRequest(BaseModel):
+    user_id: Optional[int] = None
+    session_id: Optional[str] = None
+    top_k: int = Field(default=10, ge=1, le=500)
+    candidate_ids: Optional[List[int]] = None
 
 
 class Product(BaseModel):
@@ -39,14 +77,55 @@ class SimilarRequest(BaseModel):
     limit: int = Field(default=12, ge=1, le=50)
 
 
+# ============================================================================
+# Endpoints
+# ============================================================================
+
 @app.get("/health")
 def health() -> dict:
-    return {"success": True, "service": "giftly-recommendation", "modelVersion": MODEL_VERSION}
+    """
+    Kiểm tra trạng thái dịch vụ, trả về model version và mã băm SHA-256 của file .pkl đang nạp.
+    """
+    srv = ranker_service or init_service()
+    return {
+        "status": "healthy",
+        "service": "giftly-recommendation",
+        "modelVersion": srv.model_version,
+        "modelSha256": srv.model_sha256,
+        "totalUsersLoaded": len(srv.user_groups),
+        "candidatePoolSize": srv.candidate_pool_size,
+    }
 
+
+@app.post("/recommend/rank")
+def recommend_rank(request: RankRequest) -> dict:
+    """
+    Xếp hạng danh sách sản phẩm cho người dùng bằng mô hình Ranker LC-1 (LightGBM).
+    - Nhận: user_id (hoặc session_id), top_k, tùy chọn candidate_ids.
+    - Trả về: danh sách sản phẩm kèm điểm số, nguồn ứng viên và lý do gợi ý nổi bật.
+    - Người dùng cold / không đủ lịch sử: tự động chuyển sang fallback Popularity.
+    """
+    srv = ranker_service or init_service()
+    return srv.rank(
+        user_id=request.user_id,
+        top_k=request.top_k,
+        candidate_ids=request.candidate_ids,
+    )
+
+
+# ============================================================================
+# Legacy Endpoints (Tương thích ngược với Frontend và Gift Finder)
+# ============================================================================
 
 @app.get("/model")
 def model_info() -> dict:
-    return {"modelVersion": MODEL_VERSION, "kind": "content-based-rule-baseline", "trained": False}
+    srv = ranker_service or init_service()
+    return {
+        "modelVersion": srv.model_version,
+        "kind": "lightgbm-ranker-lc1",
+        "trained": True,
+        "modelSha256": srv.model_sha256,
+    }
 
 
 @app.post("/recommendations")

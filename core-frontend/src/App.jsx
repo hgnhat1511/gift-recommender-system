@@ -123,7 +123,7 @@ function App() {
   const [products, setProducts] = useState([]);
   const [newProducts, setNewProducts] = useState([]);
   const [popularProducts, setPopularProducts] = useState([]);
-  const [recommendations, setRecommendations] = useState({ method: '', items: [] });
+  const [recommendations, setRecommendations] = useState({ method: '', source: '', items: [] });
   const [banners, setBanners] = useState([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [sliderPaused, setSliderPaused] = useState(false);
@@ -171,7 +171,7 @@ function App() {
 
     // 2. Gợi ý từ hệ thống
     api.get('/products/recommendations', { params: { limit: 6 } })
-      .then(({ data }) => setRecommendations(data.data || { method: '', items: [] }))
+      .then(({ data }) => setRecommendations(data.data || { method: '', source: '', items: [] }))
       .catch(() => {});
 
     // 3. Sản phẩm
@@ -561,6 +561,7 @@ function App() {
                     key={product.id}
                     product={product}
                     recommendationSource="home"
+                    isRanker={recommendations.source === 'ranker_lc1'}
                     onChange={setNotice}
                   />
                 ))}

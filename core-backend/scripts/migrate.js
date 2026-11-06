@@ -18,6 +18,24 @@ async function migrate() {
                 );
                 if (column.length) continue;
             }
+            if (/^ALTER\s+TABLE\s+`?users`?\s+ADD\s+COLUMN\s+`?ml_user_id`?/i.test(statement)) {
+                const [column] = await pool.execute(
+                    "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='ml_user_id' LIMIT 1"
+                );
+                if (column.length) continue;
+            }
+            if (/^ALTER\s+TABLE\s+`?products`?\s+ADD\s+COLUMN\s+`?ml_product_id`?/i.test(statement)) {
+                const [column] = await pool.execute(
+                    "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='products' AND COLUMN_NAME='ml_product_id' LIMIT 1"
+                );
+                if (column.length) continue;
+            }
+            if (/^ALTER\s+TABLE\s+`?products`?\s+ADD\s+COLUMN\s+`?is_synthetic_display`?/i.test(statement)) {
+                const [column] = await pool.execute(
+                    "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='products' AND COLUMN_NAME='is_synthetic_display' LIMIT 1"
+                );
+                if (column.length) continue;
+            }
             await pool.query(statement);
         }
     }
