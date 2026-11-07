@@ -11,10 +11,12 @@ import './commerce.css';
 
 export function ProductCard({ product, onChange, recommendationSource, isRanker }) {
   const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+  const isSynthetic = Boolean(product.isSyntheticDisplay);
   function trackRecommendationClick(){
     if(recommendationSource)api.post('/products/events',{productId:product.id,eventType:'RECOMMENDATION_CLICK',context:{source:recommendationSource}}).catch(()=>{});
   }
   async function add(){
+    if(isSynthetic) return;
     setError('');
     if(!getAuth()?.token){
       const result=addGuestCartItem(product.id,product.stock);
@@ -25,10 +27,23 @@ export function ProductCard({ product, onChange, recommendationSource, isRanker 
     setBusy(true);try{await api.post('/cart/items',buildAddCartItemPayload(product.id,1));emitCartChange();onChange?.('\u0110\u00e3 th\u00eam s\u1ea3n ph\u1ea9m v\u00e0o gi\u1ecf h\u00e0ng.')}catch(e){setError(getApiError(e,'Kh\u00f4ng th\u1ec3 th\u00eam v\u00e0o gi\u1ecf.'))}finally{setBusy(false)}
   }
   return <article className="commerce-product">
-    <Link to={`/products/${product.id}`} className="commerce-product-image" onClick={trackRecommendationClick}><img src={product.imageUrl||'/icons.svg'} alt={product.name} loading="lazy"/><span>{product.stock>0?product.category:'Tạm hết hàng'}</span></Link>
-    <div className="commerce-product-content"><small>{product.category||'Giftly'}</small><Link to={`/products/${product.id}`} className="commerce-product-name" onClick={trackRecommendationClick}>{product.name}</Link>
+    <Link to={`/products/${product.id}`} className="commerce-product-image" onClick={trackRecommendationClick}><img src={product.imageUrl||'/icons.svg'} alt={product.name} loading="lazy"/><span>{isSynthetic?'Demo REES46':product.stock>0?product.category:'Tạm hết hàng'}</span></Link>
+    <div className="commerce-product-content">
+      {isSynthetic&&<span className="commerce-badge-synthetic">Sản phẩm demo, không đặt mua</span>}
+      <small>{product.category||'Giftly'}</small><Link to={`/products/${product.id}`} className="commerce-product-name" onClick={trackRecommendationClick}>{product.name}</Link>
       <div className="commerce-product-rating"><Star size={14} fill="currentColor"/><b>{product.reviewCount?Number(product.averageRating).toFixed(1):'Mới'}</b><span>({product.reviewCount||0})</span></div>
-      <strong>{money(product.price)}</strong>{isRanker&&product.reasons?.length>0&&<ul className="commerce-reasons recommendation-reasons">{product.reasons.slice(0,2).map(reason=><li key={reason}>{formatReasonLabel(reason)}</li>)}</ul>}<button className="commerce-button commerce-button-small" onClick={add} disabled={busy||product.stock<1}><ShoppingBag size={15}/>{busy?'Đang thêm…':product.stock<1?'Hết hàng':'Thêm vào giỏ'}</button>
+      <strong>{money(product.price)}</strong>
+      {isRanker&&product.reasons?.length>0&&(
+        <div className="commerce-ranker-reasons">
+          <small className="commerce-ranker-tag">Gợi ý LC-1 (theo hồ sơ demo REES46):</small>
+          <ul className="commerce-reasons recommendation-reasons">
+            {product.reasons.slice(0,2).map(reason=><li key={reason}>{formatReasonLabel(reason)}</li>)}
+          </ul>
+        </div>
+      )}
+      <button className="commerce-button commerce-button-small" onClick={add} disabled={busy||product.stock<1||isSynthetic} title={isSynthetic?'Sản phẩm demo, không đặt mua':''}>
+        <ShoppingBag size={15}/>{isSynthetic?'Không đặt mua':busy?'Đang thêm…':product.stock<1?'Hết hàng':'Thêm vào giỏ'}
+      </button>
       {error&&<span className="commerce-inline-error">{error}</span>}</div>
   </article>
 }
@@ -70,9 +85,11 @@ export function ProductDetailPage(){
   if(!data)return <main className="commerce-page commerce-loading">Đang tải sản phẩm…</main>;
   const p=data.product;const images=p.images?.length?p.images:(p.imageUrl?[{url:p.imageUrl,altText:p.name}]:[]);const currentImage=images.find(image=>image.url===activeImage)||images[0];
   return <main className="commerce-page"><div className="commerce-breadcrumb"><Link to="/">Trang chủ</Link><span>/</span><Link to="/products">Sản phẩm</Link><span>/</span><b>{p.name}</b></div>
-    <section className="commerce-detail"><div className="commerce-detail-gallery"><div className="commerce-detail-image"><img src={currentImage?.url||'/icons.svg'} alt={currentImage?.altText||p.name}/></div>{images.length>1&&<div className="commerce-detail-thumbnails" aria-label="Danh sách ảnh sản phẩm">{images.map((image,index)=><button type="button" key={image.url} className={currentImage?.url===image.url?'is-active':''} aria-label={'Xem ảnh '+(index+1)} onClick={()=>setActiveImage(image.url)}><img src={image.url} alt={image.altText||p.name}/></button>)}</div>}</div><div className="commerce-detail-info"><span className="commerce-kicker">{p.category}</span><h1>{p.name}</h1><div className="commerce-product-rating"><Star size={16} fill="currentColor"/><b>{p.reviewCount?Number(p.averageRating).toFixed(1):'Chưa có đánh giá'}</b><span>({p.reviewCount})</span></div><strong className="commerce-detail-price">{money(p.price)}</strong><p>{p.description}</p><p className={p.stock>0?'commerce-stock':'commerce-stock commerce-stock-out'}>{p.stock>0?`Còn ${p.stock} sản phẩm`:'Tạm hết hàng'}</p>
+    <section className="commerce-detail"><div className="commerce-detail-gallery"><div className="commerce-detail-image"><img src={currentImage?.url||'/icons.svg'} alt={currentImage?.altText||p.name}/></div>{images.length>1&&<div className="commerce-detail-thumbnails" aria-label="Danh sách ảnh sản phẩm">{images.map((image,index)=><button type="button" key={image.url} className={currentImage?.url===image.url?'is-active':''} aria-label={'Xem ảnh '+(index+1)} onClick={()=>setActiveImage(image.url)}><img src={image.url} alt={image.altText||p.name}/></button>)}</div>}</div><div className="commerce-detail-info">
+      {p.isSyntheticDisplay && <div className="commerce-badge-synthetic commerce-badge-synthetic-detail">Sản phẩm demo, không đặt mua</div>}
+      <span className="commerce-kicker">{p.category}</span><h1>{p.name}</h1><div className="commerce-product-rating"><Star size={16} fill="currentColor"/><b>{p.reviewCount?Number(p.averageRating).toFixed(1):'Chưa có đánh giá'}</b><span>({p.reviewCount})</span></div><strong className="commerce-detail-price">{money(p.price)}</strong><p>{p.description}</p><p className={p.stock>0?'commerce-stock':'commerce-stock commerce-stock-out'}>{p.stock>0?`Còn ${p.stock} sản phẩm`:'Tạm hết hàng'}</p>
       <div className="commerce-tags">{(p.occasionTags||[]).map(t=><span key={t}>{occasions.find(x=>x[0]===t)?.[1]||t}</span>)}{(p.recipientTags||[]).slice(0,4).map(t=><span key={t}>{recipients.find(x=>x[0]===t)?.[1]||t}</span>)}{(p.interestTags||[]).slice(0,3).map(t=><span key={t}>{interests.find(x=>x[0]===t)?.[1]||t}</span>)}{p.style&&<span key="style">{styles.find(x=>x[0]===p.style)?.[1]||p.style}</span>}{p.giftType&&<span key="giftType">{giftTypes.find(x=>x[0]===p.giftType)?.[1]||p.giftType}</span>}</div>
-      <div className="commerce-detail-actions"><button className="commerce-button" disabled={!p.stock} onClick={addCart}><ShoppingBag size={18}/>Thêm vào giỏ</button><button className="commerce-icon-button" onClick={favorite} aria-label="Yêu thích"><Heart size={19}/></button></div>{notice&&<p className="commerce-alert commerce-alert-success">{notice} <Link to="/cart">Xem giỏ hàng</Link></p>}{error&&<p className="commerce-alert">{error}</p>}</div></section>
+      <div className="commerce-detail-actions"><button className="commerce-button" disabled={!p.stock || p.isSyntheticDisplay} onClick={addCart} title={p.isSyntheticDisplay ? 'Sản phẩm demo, không đặt mua' : ''}><ShoppingBag size={18}/>{p.isSyntheticDisplay ? 'Sản phẩm demo, không đặt mua' : 'Thêm vào giỏ'}</button><button className="commerce-icon-button" onClick={favorite} aria-label="Yêu thích"><Heart size={19}/></button></div>{notice&&<p className="commerce-alert commerce-alert-success">{notice} <Link to="/cart">Xem giỏ hàng</Link></p>}{error&&<p className="commerce-alert">{error}</p>}</div></section>
     <section className="commerce-section"><div className="commerce-section-heading"><div><span className="commerce-kicker">CẢM NHẬN KHÁCH HÀNG</span><h2>Đánh giá sản phẩm</h2></div><span>{reviews?.total||0} đánh giá</span></div>{reviews?.distribution&&<div className="commerce-review-distribution">{[5,4,3,2,1].map(stars=><span key={stars}>{stars}★ · {reviews.distribution[stars]}</span>)}</div>}
       {getAuth()?.token&&orders.length>0&&<form className="commerce-review-form" onSubmit={submitReview}><h3>Bạn đã nhận sản phẩm này?</h3><label>Đơn hàng<select required value={review.orderId} onChange={e=>setReview(v=>({...v,orderId:e.target.value}))}><option value="">Chọn đơn đã giao</option>{orders.map(o=><option key={o.id} value={o.id}>{o.orderCode}</option>)}</select></label><label>Số sao<select value={review.rating} onChange={e=>setReview(v=>({...v,rating:Number(e.target.value)}))}>{[5,4,3,2,1].map(n=><option key={n} value={n}>{n} sao</option>)}</select></label><label>Nhận xét<textarea maxLength={2000} value={review.body} onChange={e=>setReview(v=>({...v,body:e.target.value}))}/></label><button className="commerce-button">Gửi đánh giá</button></form>}
       {reviews?.items?.length?<div className="commerce-reviews">{reviews.items.map(r=><article key={r.id}><b>{r.author}</b><div className="commerce-product-rating">{'★'.repeat(r.rating)}</div><p>{r.body}</p><small>{new Date(r.createdAt).toLocaleDateString('vi-VN')}</small></article>)}</div>:<div className="commerce-empty commerce-empty-small"><Star/><p>Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.</p></div>}</section>
@@ -89,5 +106,16 @@ export function GiftFinderPage(){
       <fieldset className="commerce-interests"><legend>Sở thích người nhận</legend>{interests.map(([v,l])=><label key={v}><input type="checkbox" checked={form.interests.includes(v)} onChange={()=>toggleInterest(v)}/>{l}</label>)}</fieldset><button className="commerce-button" disabled={loading}><Sparkles size={17}/>{loading?'Đang tìm…':'Tìm quà phù hợp'}</button>
     </form>{error&&<p className="commerce-alert">{error}</p>}{items.length>0&&<section className="commerce-section"><div className="commerce-section-heading"><div><span className="commerce-kicker">SO KHỚP THUỘC TÍNH</span><h2>{items.length} gợi ý từ danh mục hiện có</h2></div><button className="commerce-text-button" onClick={()=>setItems([])}>Làm mới tiêu chí</button></div><div className="commerce-product-grid">{items.map(p=><article className="commerce-product" key={p.id}><Link className="commerce-product-image" to={`/products/${p.id}`} onClick={()=>api.post('/products/events',{productId:p.id,eventType:'RECOMMENDATION_CLICK',context:{source:'gift_finder'}}).catch(()=>{})}><img src={p.imageUrl} alt={p.name}/></Link><div className="commerce-product-content"><small>{p.category}</small><Link className="commerce-product-name" to={`/products/${p.id}`} onClick={()=>api.post('/products/events',{productId:p.id,eventType:'RECOMMENDATION_CLICK',context:{source:'gift_finder'}}).catch(()=>{})}>{p.name}</Link><strong>{money(p.price)}</strong><ul className="commerce-reasons">{p.reasons.map(r=><li key={r}>{formatReasonLabel(r)}</li>)}</ul><ProductCardButton product={p} onChange={setNotice}/></div></article>)}</div></section>}{!loading&&items.length===0&&!error&&<p className="commerce-muted">Điều chỉnh tiêu chí rồi tìm để xem sản phẩm phù hợp. Kết quả được tính theo tiêu chí quà tặng phù hợp.</p>}{notice&&<p className="commerce-alert commerce-alert-success">{notice}</p>}</main>
 }
-function ProductCardButton({product,onChange}){const [busy,setBusy]=useState(false);async function add(){if(!getAuth()?.token){const result=addGuestCartItem(product.id,product.stock);onChange(result.ok?'\u0110\u00e3 th\u00eam v\u00e0o gi\u1ecf h\u00e0ng.':result.reason==='stock'?'S\u1ed1 l\u01b0\u1ee3ng trong gi\u1ecf \u0111\u00e3 \u0111\u1ea1t t\u1ed3n kho hi\u1ec7n t\u1ea1i.':'Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt gi\u1ecf.');return}setBusy(true);try{await api.post('/cart/items',buildAddCartItemPayload(product.id,1));emitCartChange();onChange('\u0110\u00e3 th\u00eam v\u00e0o gi\u1ecf h\u00e0ng.')}catch(e){onChange(getApiError(e,'Kh\u00f4ng th\u1ec3 th\u00eam v\u00e0o gi\u1ecf.'))}finally{setBusy(false)}}return <button className="commerce-button commerce-button-small" disabled={busy||product.stock<1} onClick={add}><ShoppingBag size={15}/>{busy?'\u0110ang th\u00eam\u2026':'Th\u00eam v\u00e0o gi\u1ecf'}</button>}
+function ProductCardButton({product,onChange}){
+  const isSynthetic = Boolean(product.isSyntheticDisplay);
+  const [busy,setBusy]=useState(false);
+  async function add(){
+    if(isSynthetic) return;
+    if(!getAuth()?.token){const result=addGuestCartItem(product.id,product.stock);onChange(result.ok?'\u0110\u00e3 th\u00eam v\u00e0o gi\u1ecf h\u00e0ng.':result.reason==='stock'?'S\u1ed1 l\u01b0\u1ee3ng trong gi\u1ecf \u0111\u00e3 \u0111\u1ea1t t\u1ed3n kho hi\u1ec7n t\u1ea1i.':'Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt gi\u1ecf.');return}
+    setBusy(true);try{await api.post('/cart/items',buildAddCartItemPayload(product.id,1));emitCartChange();onChange('\u0110\u00e3 th\u00eam v\u00e0o gi\u1ecf h\u00e0ng.')}catch(e){onChange(getApiError(e,'Kh\u00f4ng th\u1ec3 th\u00eam v\u00e0o gi\u1ecf.'))}finally{setBusy(false)}
+  }
+  return <button className="commerce-button commerce-button-small" disabled={busy||product.stock<1||isSynthetic} onClick={add} title={isSynthetic?'Sản phẩm demo, không đặt mua':''}>
+    <ShoppingBag size={15}/>{isSynthetic?'Không đặt mua':busy?'\u0110ang th\u00eam\u2026':'Th\u00eam v\u00e0o gi\u1ecf'}
+  </button>
+}
 

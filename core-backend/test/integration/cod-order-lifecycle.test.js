@@ -4,13 +4,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
-const testDatabase = (process.env.TEST_DB_NAME || 'giftly_verification_test').trim();
+const testDatabase = (process.env.TEST_DB_NAME || 'giftly_e2e_test').trim();
 
 test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn hàng COD', {
-  skip: testDatabase ? false : 'Set TEST_DB_NAME to giftly_verification_test'
+  skip: testDatabase ? false : 'Set TEST_DB_NAME to giftly_e2e_test'
 }, async (t) => {
-  // Bắt buộc kết nối database test chuyên biệt kết thúc bằng _test, KHÔNG chạy trên gift_ecommerce
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('TỪ CHỐI CHẠY: Không thể chạy test ghi dữ liệu trên NODE_ENV=production');
+  }
+  if (!testDatabase.endsWith('_test') || testDatabase === 'gift_ecommerce' || testDatabase === 'giftly_verification_test') {
+    throw new Error(`TỪ CHỐI CHẠY: Database "${testDatabase}" không hợp lệ. Chỉ chấp nhận database kết thúc bằng "_test" và tuyệt đối không đụng vào gift_ecommerce hay giftly_verification_test!`);
+  }
   assert.match(testDatabase, /^giftly_[a-z0-9_]*_test$/i, 'Test bắt buộc phải chạy trên database test chuyên biệt');
+
+  const { resetTestDatabase } = require('../../scripts/resetTestDb');
+  await resetTestDatabase(testDatabase, { seed: true });
+
+  process.env.TEST_DB_NAME = testDatabase;
   process.env.DB_NAME = testDatabase;
   process.env.JWT_SECRET ||= crypto.randomBytes(48).toString('base64url');
   process.env.ML_SERVICE_URL = '';
@@ -689,71 +699,13 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
 
     // Kết thúc thành công toàn bộ 12 ca kiểm thử
   } finally {
-    // Dọn dẹp dữ liệu kiểm thử trong DB test
-    try {
-      if (userAId || userBId || adminId) {
-        const uids = [userAId, userBId, adminId].filter(Boolean);
-        const [orders] = await pool.query(
-          `SELECT id FROM orders WHERE user_id IN (${uids.map(() => '?').join(',')})`,
-          uids
-        );
-        const orderIds = orders.map((o) => o.id);
-        if (orderIds.length > 0) {
-          await pool.query(
-            `DELETE FROM order_items WHERE order_id IN (${orderIds.map(() => '?').join(',')})`,
-            orderIds
-          );
-          await pool.query(
-            `DELETE FROM order_status_history WHERE order_id IN (${orderIds.map(() => '?').join(',')})`,
-            orderIds
-          );
-          await pool.query(
-            `DELETE FROM inventory_movements WHERE order_id IN (${orderIds.map(() => '?').join(',')})`,
-            orderIds
-          );
-          await pool.query(
-            `DELETE FROM notifications WHERE order_id IN (${orderIds.map(() => '?').join(',')})`,
-            orderIds
-          );
-          await pool.query(
-            `DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`,
-            orderIds
-          );
-        }
-        await pool.query(
-          `DELETE FROM cart_items WHERE user_id IN (${uids.map(() => '?').join(',')})`,
-          uids
-        );
-        await pool.query(
-          `DELETE FROM addresses WHERE user_id IN (${uids.map(() => '?').join(',')})`,
-          uids
-        );
-        await pool.query(
-          `DELETE FROM users WHERE id IN (${uids.map(() => '?').join(',')})`,
-          uids
-        );
-      }
-      if (pInStock1 || pInStock2 || pOutOfStock || pSingleUnit) {
-        const pids = [pInStock1, pInStock2, pOutOfStock, pSingleUnit].filter(Boolean);
-        await pool.query(
-          `DELETE FROM inventory_movements WHERE product_id IN (${pids.map(() => '?').join(',')})`,
-          pids
-        );
-        await pool.query(
-          `DELETE FROM products WHERE id IN (${pids.map(() => '?').join(',')})`,
-          pids
-        );
-      }
-    } catch {
-      // Bỏ qua lỗi cleanup
-    }
-
     if (server) {
       await new Promise((resolve) => server.close(resolve));
     }
 
     try {
       await pool.end();
+      delete require.cache[require.resolve('../../config/db')];
     } catch {
       // Bỏ qua lỗi đóng pool
     }

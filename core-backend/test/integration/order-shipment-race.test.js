@@ -4,12 +4,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 
-const testDatabase = (process.env.TEST_DB_NAME || 'giftly_verification_test').trim();
+const testDatabase = (process.env.TEST_DB_NAME || 'giftly_e2e_test').trim();
 
 test('Khu vực 2i & 2j: Race condition Vận đơn GHN, Bù trừ Pha 3, Hết hạn CREATING và Chặn VNPAY chưa thanh toán', {
-  skip: testDatabase ? false : 'Set TEST_DB_NAME to giftly_verification_test'
+  skip: testDatabase ? false : 'Set TEST_DB_NAME to giftly_e2e_test'
 }, async (t) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('TỪ CHỐI CHẠY: Không thể chạy test ghi dữ liệu trên NODE_ENV=production');
+  }
+  if (!testDatabase.endsWith('_test') || testDatabase === 'gift_ecommerce' || testDatabase === 'giftly_verification_test') {
+    throw new Error(`TỪ CHỐI CHẠY: Database "${testDatabase}" không hợp lệ. Chỉ chấp nhận database kết thúc bằng "_test" và tuyệt đối không đụng vào gift_ecommerce hay giftly_verification_test!`);
+  }
   assert.match(testDatabase, /^giftly_[a-z0-9_]*_test$/i, 'Test bắt buộc phải chạy trên database test chuyên biệt');
+
+  const { resetTestDatabase } = require('../../scripts/resetTestDb');
+  await resetTestDatabase(testDatabase, { seed: true });
+
+  process.env.TEST_DB_NAME = testDatabase;
   process.env.DB_NAME = testDatabase;
   process.env.JWT_SECRET ||= crypto.randomBytes(48).toString('base64url');
   process.env.ML_SERVICE_URL = '';
@@ -570,6 +581,7 @@ test('Khu vực 2i & 2j: Race condition Vận đơn GHN, Bù trừ Pha 3, Hết 
     }
     try {
       await pool.end();
+      delete require.cache[require.resolve('../../config/db')];
     } catch {
       // ignore
     }

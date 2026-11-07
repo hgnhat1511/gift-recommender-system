@@ -91,7 +91,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
     }
     execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', email], {
       cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test' },
+      env: { ...process.env, DB_NAME: process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test' },
       stdio: 'pipe',
     });
     await api.dispose();
@@ -100,7 +100,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
 
 test('customer can start VNPAY checkout and return unpaid until a verified provider callback', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const email = `e2e-vnpay-${randomUUID()}@example.invalid`;
   const password = 'E2E-VNPAY-Store-2026!';
   let token;
@@ -183,7 +183,7 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
   const email = `e2e-admin-${randomUUID()}@example.invalid`;
   const password = 'E2E-Admin-Test-2026!';
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   let token;
   let productId;
   let pendingDelta = 0;
@@ -260,7 +260,7 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
 
 test('admin can inspect an order, advance its state, and cancel it safely', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-order-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Order-Test-2026!';
@@ -388,7 +388,7 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
 
 test('admin can lock and unlock a customer and existing JWTs follow the account status', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-customer-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Customer-Lock-2026!';
@@ -463,7 +463,7 @@ test('admin can lock and unlock a customer and existing JWTs follow the account 
 
 test('admin can record shipment tracking and the customer can see its history', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-shipping-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-shipping-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Shipping-Customer-2026!';
@@ -585,7 +585,7 @@ test('admin can record shipment tracking and the customer can see its history', 
 
 test('customer review and return flows require delivery, publish through admin review, and restock accurately', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-return-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-return-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Return-Customer-2026!';
@@ -782,7 +782,7 @@ test('customer review and return flows require delivery, publish through admin r
 
 test('admin-created coupon recalculates checkout and is recorded on the order', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-coupon-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-coupon-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Coupon-Customer-2026!';

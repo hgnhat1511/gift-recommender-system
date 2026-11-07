@@ -12,15 +12,20 @@ async function importReesCatalog() {
         process.exit(1);
     }
 
-    const allowedDatabases = ['gift_ecommerce', 'gift_ecommerce_dev'];
-    const currentDb = process.env.DB_NAME || 'gift_ecommerce';
+    const allowedDatabases = ['gift_ecommerce', 'gift_ecommerce_dev', 'giftly_e2e_test'];
+    const currentDb = (process.env.TEST_DB_NAME || process.env.DB_NAME || 'gift_ecommerce').trim();
     if (!allowedDatabases.includes(currentDb)) {
         console.error(`LỖI AN TOÀN: Database "${currentDb}" không nằm trong allowlist an toàn: [${allowedDatabases.join(', ')}]!`);
         process.exit(1);
     }
 
-    // 2. Xác định chế độ chạy (mặc định dry-run, chỉ ghi khi có cờ --apply)
     const isApply = process.argv.includes('--apply');
+    if (isApply && currentDb === 'gift_ecommerce') {
+        console.error('LỖI AN TOÀN: Tuyệt đối KHÔNG được phép chạy --apply trên database dev "gift_ecommerce"!');
+        process.exit(1);
+    }
+
+    // 2. Xác định chế độ chạy (mặc định dry-run, chỉ ghi khi có cờ --apply)
     const isDryRun = !isApply;
     const canUpdateDisplay = process.argv.includes('--update-display');
 

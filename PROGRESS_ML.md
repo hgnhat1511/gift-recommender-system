@@ -17,7 +17,11 @@ Hệ thống gợi ý Giftly áp dụng kiến trúc chuẩn công nghiệp 2 gi
      + *Nhóm User (11 đặc trưng):* Tần suất tương tác, tỷ lệ mua/giỏ, recency, chi tiêu trung bình,...
      + *Nhóm Item (6 đặc trưng):* Độ phổ biến, giá, phân vị giá, thương hiệu, danh mục,...
      + *Nhóm User-Item & Retrieval (14 đặc trưng):* Điểm ItemKNN, điểm TF-IDF, điểm Popularity, thứ hạng từng kênh, số kênh đề xuất, lịch sử xem/giỏ trước đó, khoảng cách thời gian tương tác cuối.
-   - Kết quả Validation: **NDCG@10 = 0.082260**, vượt trội baseline CandidateGenerator (+0.019887, tương đương +31.88%).
+   - Kết quả Validation: **NDCG@10 = 0.085476** (đạt mức tăng +37.04% so với baseline CandidateGenerator 0.062373; số 0.082260 trước đây là nhầm lẫn trong quá trình tổng hợp tài liệu).
+   - Kết quả Đánh giá Chính thức trên 2 Tập Kiểm thử Độc lập (checkpoint 7.3c - Phần B):
+     + **Tập `test_1` (7.496 users):** Baseline CG = `0.055774`, Ranker LC-1 = **`0.071261`** (tăng **+27.77%**, 95% Bootstrap CI: `[+0.013188, +0.018063]`, loại trừ 0).
+     + **Tập `test_2` (7.045 users):** Baseline CG = `0.053167`, Ranker LC-1 = **`0.070601`** (tăng **+32.79%**, 95% Bootstrap CI: `[+0.015119, +0.019819]`, loại trừ 0).
+     + **Phương sai giữa hai tập test (`test_2 - test_1`):** Chênh lệch hiệu năng Ranker chỉ **`-0.000660`**, chứng minh mô hình hoạt động cực kỳ ổn định qua các mốc thời gian khác nhau.
 
 ---
 

@@ -56,7 +56,7 @@ Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kh
 | Admin | Chưa có | Dashboard có lọc ngày và hiệu suất danh mục; sản phẩm/danh mục/banner, coupon theo danh mục, đơn lọc ngày/trạng thái/thanh toán, khách/role, tồn kho ledger/adjustment, return, review moderation |
 | Profile | Chưa có | Thông tin liên hệ, mật khẩu, địa chỉ, yêu thích, thông báo và yêu cầu xóa có xác thực/queue admin |
 | Gift Finder | Nút placeholder | Content matching từ tags catalog, budget, lời giải thích khớp; ghi sự kiện tìm và click |
-| AI Python | Baseline rỗng | Ranker LC-1 (LightGBM) đã huấn luyện, đóng băng (SHA-256: 1d114887...), phục vụ online qua FastAPI POST /recommend/rank trong Docker container gift_ml_service (chi tiết xem PROGRESS_ML.md) |
+| AI Python | Baseline rỗng | Ranker LC-1 (LightGBM) đã huấn luyện, đóng băng (SHA-256: 1d114887...), đạt Validation NDCG@10 = 0.085476 (+37,04% so với baseline 0.062373); kết quả kiểm thử chính thức: test_1 NDCG@10 = 0.071261 (+27,77%), test_2 NDCG@10 = 0.070601 (+32,79%). Phục vụ online qua FastAPI POST /recommend/rank trong Docker container gift_ml_service (chi tiết xem PROGRESS_ML.md) |
 | Redis | Health check | Dùng health check; chưa cache nghiệp vụ |
 | Thanh toán/vận chuyển/email | Chưa tích hợp | COD; admin lưu hãng/mã vận đơn/lịch sử nội bộ, khách xem trong app và nhận thông báo; chưa có API hãng hoặc email reset |
 

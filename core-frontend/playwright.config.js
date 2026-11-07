@@ -3,7 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const backendDirectory = path.resolve(process.cwd(), '../core-backend');
-const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_verification_test';
+const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
 
 export default defineConfig({
   testDir: './e2e',
@@ -22,6 +22,7 @@ export default defineConfig({
       cwd: backendDirectory,
       env: {
         DB_NAME: testDatabase,
+        TEST_DB_NAME: testDatabase,
         VNPAY_TMN_CODE: 'GIFTLYTEST',
         VNPAY_HASH_SECRET: 'playwright-only-dummy-secret-never-use-for-merchant',
         VNPAY_RETURN_URL: 'http://localhost:5000/api/payments/vnpay/return',
