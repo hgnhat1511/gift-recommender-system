@@ -1,9 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import { expect, request, test } from '@playwright/test';
+import { CUSTOMER_STATUS, ORDER_STATUS, RETURN_STATUS } from '../src/lib/labels.js';
 
+const require = createRequire(import.meta.url);
 const backendDirectory = path.resolve(process.cwd(), '../core-backend');
 
 async function openAuthenticatedPage(page, session, path) {
@@ -30,7 +33,6 @@ test('customer can log in, place a COD order, and view its order detail', async 
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
   const email = `e2e-${randomUUID()}@example.invalid`;
   const password = 'E2E-Store-Test-2026!';
-  let token;
 
   try {
     const registration = await api.post('/api/auth/register', {
@@ -42,7 +44,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
     await page.locator('#login-password').fill(password);
     await page.locator('form.auth-form button.auth-submit').click();
     await expect(page).toHaveURL('http://localhost:5173/');
-    token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
+    const token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
     await page.goto('/account#addresses');
     const addressForm = page.locator('#addresses form.account-address-form');
     const addressFields = addressForm.locator('label');
@@ -70,41 +72,21 @@ test('customer can log in, place a COD order, and view its order detail', async 
     await placeOrder.click();
     await expect(page).toHaveURL(/\/orders\/\d+\?placed=1/);
     await expect(page.locator('.commerce-page-heading h1')).toBeVisible();
-    await expect(page.locator('.commerce-page-heading .commerce-status')).toHaveText('Chờ xác nhận');
+    // Đơn COD khi kho còn hàng được backend tự động chuyển sang PROCESSING (Đang chuẩn bị hàng)
+    await expect(page.locator('.commerce-page-heading .commerce-status')).toHaveText(ORDER_STATUS.PROCESSING);
     await expect(page.locator('.commerce-cart-row .commerce-cart-info b').filter({ hasText: productName })).toBeVisible();
     const orderId = Number(page.url().match(/\/orders\/(\d+)/)?.[1]);
     const orderDetail = await api.get(`/api/orders/${orderId}`, { headers: { authorization: `Bearer ${token}` } });
     expect((await orderDetail.json()).data.shippingAddress.isNewAdministrativeAddress).toBe(true);
   } finally {
-    if (token) {
-      const ordersResponse = await api.get('/api/orders?limit=50', {
-        headers: { authorization: `Bearer ${token}` },
-      }).catch(() => null);
-      if (ordersResponse?.ok()) {
-        const { data: orders } = await ordersResponse.json();
-        for (const order of orders.items.filter((item) => item.status === 'PENDING' && item.paymentStatus === 'UNPAID')) {
-          await api.post(`/api/orders/${order.id}/cancel`, {
-            headers: { authorization: `Bearer ${token}` },
-          });
-        }
-      }
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', email], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test' },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
 
 test('customer can start VNPAY checkout and return unpaid until a verified provider callback', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
-  const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const email = `e2e-vnpay-${randomUUID()}@example.invalid`;
   const password = 'E2E-VNPAY-Store-2026!';
-  let token;
-  let orderId;
 
   try {
     const registration = await api.post('/api/auth/register', {
@@ -116,7 +98,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
     await page.locator('#login-password').fill(password);
     await page.locator('form.auth-form button.auth-submit').click();
     await expect(page).toHaveURL('http://localhost:5173/');
-    token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
+    const token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
     const address = await api.post('/api/account/addresses', {
       headers: { authorization: `Bearer ${token}` },
       data: {
@@ -154,7 +136,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
     await submit.click();
     const orderResponse = await orderPromise;
     expect(orderResponse.status()).toBe(201);
-    orderId = (await orderResponse.json()).data.orderId;
+    const orderId = (await orderResponse.json()).data.orderId;
 
     const paymentResponse = await paymentResponsePromise;
     expect(paymentResponse.status()).toBe(200);
@@ -167,14 +149,6 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
     expect(orderDetail.ok()).toBeTruthy();
     expect((await orderDetail.json()).data.paymentStatus).toBe('UNPAID');
   } finally {
-    if (token && orderId) {
-      await api.post(`/api/orders/${orderId}/cancel`, { headers: { authorization: `Bearer ${token}` } });
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', email], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -184,7 +158,6 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
   const email = `e2e-admin-${randomUUID()}@example.invalid`;
   const password = 'E2E-Admin-Test-2026!';
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
-  let token;
   let productId;
   let pendingDelta = 0;
 
@@ -201,7 +174,6 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
     const login = await api.post('/api/auth/login', { data: { email, password } });
     expect(login.ok()).toBeTruthy();
     const loginBody = await login.json();
-    token = loginBody.data.token;
     expect(loginBody.data.user.role).toBe('ADMIN');
 
     await openAuthenticatedPage(page, loginBody.data, '/admin');
@@ -226,7 +198,7 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
       const response = await responsePromise;
       if (response.ok()) pendingDelta += delta;
       expect(response.status()).toBe(200);
-      await expect(page.locator('.commerce-alert-success')).toContainText(reason === 'Playwright E2E stock intake' ? 'Đã điều chỉnh kho' : 'Đã điều chỉnh kho');
+      await expect(page.locator('.commerce-alert-success')).toContainText('Đã điều chỉnh kho');
       await expect(firstProductRow.locator('td').nth(3)).toHaveText(String(startingStock + pendingDelta));
     };
 
@@ -243,17 +215,6 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
     await adjust(-2, 'Playwright E2E stock rollback');
     expect(pendingDelta).toBe(0);
   } finally {
-    if (token && productId && pendingDelta !== 0) {
-      await api.post(`/api/admin/products/${productId}/inventory`, {
-        headers: { authorization: `Bearer ${token}` },
-        data: { quantityDelta: -pendingDelta, reason: 'Playwright E2E safety rollback' },
-      });
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', email], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -265,9 +226,6 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Order-Test-2026!';
   const adminPassword = 'E2E-Admin-Order-2026!';
-  let customerToken;
-  let adminToken;
-  let orderId;
 
   try {
     const customerRegistration = await api.post('/api/auth/register', {
@@ -276,7 +234,7 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
     expect(customerRegistration.status()).toBe(201);
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.ok()).toBeTruthy();
-    customerToken = (await customerLogin.json()).data.token;
+    const customerToken = (await customerLogin.json()).data.token;
     const customerAuth = { authorization: `Bearer ${customerToken}` };
 
     const addressResponse = await api.post('/api/account/addresses', {
@@ -302,7 +260,7 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
     });
     expect(orderResponse.status()).toBe(201);
     const order = (await orderResponse.json()).data;
-    orderId = order.orderId;
+    const orderId = order.orderId;
 
     const adminRegistration = await api.post('/api/auth/register', {
       data: { fullName: 'Giftly admin order fixture', email: adminEmail, password: adminPassword },
@@ -316,72 +274,33 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
     const adminSession = (await adminLogin.json()).data;
-    adminToken = adminSession.token;
     await openAuthenticatedPage(page, adminSession, '/admin/orders');
 
     const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(orderRow).toBeVisible();
     await orderRow.getByRole('button', { name: order.orderCode }).click();
-    await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · Chờ xác nhận`) })).toBeVisible();
-    await expect(page.locator('.admin-card').last()).toContainText(product.name);
+    // Đơn COD kho còn hàng tự động ở PROCESSING (Đang chuẩn bị hàng)
+    await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · ${ORDER_STATUS.PROCESSING}`) })).toBeVisible();
+    await expect(page.locator('.admin-card').filter({ hasText: `${order.orderCode} · ` })).toContainText(product.name);
 
     page.on('dialog', (dialog) => dialog.accept('Playwright state transition fixture'));
-    const orderStatusLabels = {
-      PENDING: 'Chờ xác nhận',
-      CONFIRMED: 'Đã xác nhận',
-      PROCESSING: 'Đang chuẩn bị hàng',
-      SHIPPED: 'Đang giao hàng',
-      DELIVERED: 'Đã giao hàng',
-      CANCELLED: 'Đã hủy',
-    };
     const transition = async (status) => {
       const responsePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
       await orderRow.getByRole('combobox').selectOption(status);
       const response = await responsePromise;
       expect(response.status()).toBe(200);
-      const expectedLabel = orderStatusLabels[status] || status;
+      const expectedLabel = ORDER_STATUS[status] || status;
       await expect(page.getByRole('heading', { name: new RegExp(`${order.orderCode} · ${expectedLabel}`) })).toBeVisible();
       await expect(orderRow.locator('td').nth(3)).toContainText(expectedLabel);
     };
 
-    await transition('CONFIRMED');
-    await transition('PROCESSING');
+    // Từ PROCESSING, admin có thể hủy đơn an toàn
     await transition('CANCELLED');
     const cancelledOrder = await api.get(`/api/orders/${orderId}`, { headers: customerAuth });
     expect(cancelledOrder.ok()).toBeTruthy();
     expect((await cancelledOrder.json()).data.status).toBe('CANCELLED');
   } finally {
-    if (customerToken) {
-      const ordersResponse = await api.get('/api/orders?limit=50', {
-        headers: { authorization: `Bearer ${customerToken}` },
-      }).catch(() => null);
-      if (ordersResponse?.ok()) {
-        const { data: orders } = await ordersResponse.json();
-        for (const order of orders.items.filter((item) => item.status !== 'CANCELLED' && item.paymentStatus === 'UNPAID')) {
-          if (adminToken) {
-            await api.patch(`/api/admin/orders/${order.id}/status`, {
-              headers: { authorization: `Bearer ${adminToken}` },
-              data: { status: 'CANCELLED', note: 'Playwright E2E cleanup' },
-            });
-          } else if (order.status === 'PENDING') {
-            await api.post(`/api/orders/${order.id}/cancel`, {
-              headers: { authorization: `Bearer ${customerToken}` },
-            });
-          }
-        }
-      }
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', customerEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -393,19 +312,16 @@ test('admin can lock and unlock a customer and existing JWTs follow the account 
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Customer-Lock-2026!';
   const adminPassword = 'E2E-Admin-Lock-2026!';
-  let customerId;
-  let customerToken;
-  let adminToken;
 
   try {
     const customerRegistration = await api.post('/api/auth/register', {
       data: { fullName: 'Giftly customer status fixture', email: customerEmail, password: customerPassword },
     });
     expect(customerRegistration.status()).toBe(201);
-    customerId = (await customerRegistration.json()).data.user.id;
+    const customerId = (await customerRegistration.json()).data.user.id;
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.ok()).toBeTruthy();
-    customerToken = (await customerLogin.json()).data.token;
+    const customerToken = (await customerLogin.json()).data.token;
     expect((await api.get('/api/auth/me', { headers: { authorization: `Bearer ${customerToken}` } })).status()).toBe(200);
 
     const adminRegistration = await api.post('/api/auth/register', {
@@ -420,7 +336,6 @@ test('admin can lock and unlock a customer and existing JWTs follow the account 
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
     const adminSession = (await adminLogin.json()).data;
-    adminToken = adminSession.token;
     await openAuthenticatedPage(page, adminSession, '/admin/customers');
     const search = page.getByPlaceholder('Tìm theo tên hoặc email');
     await search.fill(customerEmail);
@@ -431,32 +346,16 @@ test('admin can lock and unlock a customer and existing JWTs follow the account 
       response.url().includes(`/api/admin/customers/${customerId}/status`) && response.request().method() === 'PATCH');
     await customerRow.getByRole('combobox').last().selectOption('LOCKED');
     expect((await lockResponsePromise).status()).toBe(200);
-    await expect(customerRow.locator('td').nth(2)).toHaveText('LOCKED');
+    await expect(customerRow.locator('td').nth(2)).toHaveText(CUSTOMER_STATUS.LOCKED);
     expect((await api.get('/api/auth/me', { headers: { authorization: `Bearer ${customerToken}` } })).status()).toBe(401);
 
     const unlockResponsePromise = page.waitForResponse((response) =>
       response.url().includes(`/api/admin/customers/${customerId}/status`) && response.request().method() === 'PATCH');
     await customerRow.getByRole('combobox').last().selectOption('ACTIVE');
     expect((await unlockResponsePromise).status()).toBe(200);
-    await expect(customerRow.locator('td').nth(2)).toHaveText('ACTIVE');
+    await expect(customerRow.locator('td').nth(2)).toHaveText(CUSTOMER_STATUS.ACTIVE);
     expect((await api.get('/api/auth/me', { headers: { authorization: `Bearer ${customerToken}` } })).status()).toBe(200);
   } finally {
-    if (adminToken && customerId) {
-      await api.patch(`/api/admin/customers/${customerId}/status`, {
-        headers: { authorization: `Bearer ${adminToken}` },
-        data: { status: 'ACTIVE' },
-      });
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', customerEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -468,9 +367,6 @@ test('admin can record shipment tracking and the customer can see its history', 
   const adminEmail = `e2e-admin-shipping-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Shipping-Customer-2026!';
   const adminPassword = 'E2E-Shipping-Admin-2026!';
-  let customerToken;
-  let adminToken;
-  let orderId;
 
   try {
     const registration = await api.post('/api/auth/register', {
@@ -479,7 +375,7 @@ test('admin can record shipment tracking and the customer can see its history', 
     expect(registration.status()).toBe(201);
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.status(), await customerLogin.text()).toBe(200);
-    customerToken = (await customerLogin.json()).data.token;
+    const customerToken = (await customerLogin.json()).data.token;
     const customerAuth = { authorization: `Bearer ${customerToken}` };
     const address = await api.post('/api/account/addresses', {
       headers: customerAuth,
@@ -500,7 +396,7 @@ test('admin can record shipment tracking and the customer can see its history', 
     });
     expect(orderResponse.status()).toBe(201);
     const order = (await orderResponse.json()).data;
-    orderId = order.orderId;
+    const orderId = order.orderId;
 
     const adminRegistration = await api.post('/api/auth/register', {
       data: { fullName: 'Giftly shipment admin fixture', email: adminEmail, password: adminPassword },
@@ -514,18 +410,11 @@ test('admin can record shipment tracking and the customer can see its history', 
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
     const adminSession = (await adminLogin.json()).data;
-    adminToken = adminSession.token;
     await openAuthenticatedPage(page, adminSession, '/admin/orders');
     const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(orderRow).toBeVisible();
-    page.on('dialog', (dialog) => dialog.accept('Playwright shipment tracking fixture'));
-    for (const status of ['CONFIRMED', 'PROCESSING']) {
-      const updatePromise = page.waitForResponse((response) =>
-        response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
-      await orderRow.getByRole('combobox').selectOption(status);
-      expect((await updatePromise).status()).toBe(200);
-    }
 
+    // Đơn COD kho còn hàng đã ở PROCESSING, giao diện admin hiển thị sẵn form nhập vận đơn
     await orderRow.getByRole('button', { name: order.orderCode }).click();
     await expect(page.getByRole('heading', { name: 'Thông tin vận chuyển nội bộ' })).toBeVisible();
     await page.getByLabel('Đơn vị vận chuyển').fill('Playwright Local Carrier');
@@ -537,10 +426,6 @@ test('admin can record shipment tracking and the customer can see its history', 
     expect((await shippingResponsePromise).status()).toBe(200);
     await expect(page.getByText('E2E-TRACK-20261012', { exact: true })).toBeVisible();
 
-    const cancelPromise = page.waitForResponse((response) =>
-      response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
-    await orderRow.getByRole('combobox').selectOption('CANCELLED');
-    expect((await cancelPromise).status()).toBe(200);
     await page.evaluate(() => localStorage.clear());
     await page.goto('/login');
     await page.locator('#login-email').fill(customerEmail);
@@ -552,33 +437,6 @@ test('admin can record shipment tracking and the customer can see its history', 
     await expect(page.getByText('Playwright Local Carrier · E2E-TRACK-20261012', { exact: true })).toBeVisible();
     await expect(page.getByText('Test-only tracking history', { exact: true })).toBeVisible();
   } finally {
-    if (customerToken && orderId) {
-      const customerAuth = { authorization: `Bearer ${customerToken}` };
-      const orderDetail = await api.get(`/api/orders/${orderId}`, { headers: customerAuth }).catch(() => null);
-      if (orderDetail?.ok()) {
-        const { data: currentOrder } = await orderDetail.json();
-        if (currentOrder.status !== 'CANCELLED' && currentOrder.paymentStatus === 'UNPAID') {
-          if (adminToken) {
-            await api.patch(`/api/admin/orders/${orderId}/status`, {
-              headers: { authorization: `Bearer ${adminToken}` },
-              data: { status: 'CANCELLED', note: 'Playwright E2E cleanup' },
-            });
-          } else if (currentOrder.status === 'PENDING') {
-            await api.post(`/api/orders/${orderId}/cancel`, { headers: customerAuth });
-          }
-        }
-      }
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', customerEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -590,14 +448,6 @@ test('customer review and return flows require delivery, publish through admin r
   const adminEmail = `e2e-admin-return-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Return-Customer-2026!';
   const adminPassword = 'E2E-Return-Admin-2026!';
-  let customerSession;
-  let customerToken;
-  let adminSession;
-  let adminToken;
-  let product;
-  let startingStock;
-  let orderId;
-  let returnId;
 
   try {
     const customerRegistration = await api.post('/api/auth/register', {
@@ -606,9 +456,8 @@ test('customer review and return flows require delivery, publish through admin r
     expect(customerRegistration.status()).toBe(201);
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.ok()).toBeTruthy();
-    customerSession = (await customerLogin.json()).data;
-    customerToken = customerSession.token;
-    const customerAuth = { authorization: `Bearer ${customerToken}` };
+    const customerSession = (await customerLogin.json()).data;
+    const customerAuth = { authorization: `Bearer ${customerSession.token}` };
 
     const adminRegistration = await api.post('/api/auth/register', {
       data: { fullName: 'Giftly return admin fixture', email: adminEmail, password: adminPassword },
@@ -621,9 +470,8 @@ test('customer review and return flows require delivery, publish through admin r
     });
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
-    adminSession = (await adminLogin.json()).data;
-    adminToken = adminSession.token;
-    const adminAuth = { authorization: `Bearer ${adminToken}` };
+    const adminSession = (await adminLogin.json()).data;
+    const adminAuth = { authorization: `Bearer ${adminSession.token}` };
 
     const address = await api.post('/api/account/addresses', {
       headers: customerAuth,
@@ -635,12 +483,12 @@ test('customer review and return flows require delivery, publish through admin r
     expect(address.status()).toBe(201);
     const catalog = await api.get('/api/products?limit=20&inStock=true');
     expect(catalog.ok()).toBeTruthy();
-    product = (await catalog.json()).data.items.find((item) => item.stock > 0);
+    const product = (await catalog.json()).data.items.find((item) => item.stock > 0);
     expect(product).toBeTruthy();
 
     const adminProducts = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
     expect(adminProducts.ok()).toBeTruthy();
-    startingStock = (await adminProducts.json()).data.items.find((item) => item.id === product.id).stock;
+    const startingStock = (await adminProducts.json()).data.items.find((item) => item.id === product.id).stock;
 
     const cart = await api.post('/api/cart/items', {
       headers: customerAuth, data: { productId: product.id, quantity: 1 },
@@ -652,13 +500,14 @@ test('customer review and return flows require delivery, publish through admin r
     });
     expect(orderResponse.status()).toBe(201);
     const order = (await orderResponse.json()).data;
-    orderId = order.orderId;
+    const orderId = order.orderId;
 
     await openAuthenticatedPage(page, adminSession, '/admin/orders');
     const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(orderRow).toBeVisible();
     page.on('dialog', (dialog) => dialog.accept('Playwright return workflow order-state fixture.'));
-    for (const status of ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']) {
+    // Đơn COD kho còn hàng đã ở PROCESSING, admin chuyển tiếp sang SHIPPED rồi DELIVERED
+    for (const status of ['SHIPPED', 'DELIVERED']) {
       const updatePromise = page.waitForResponse((response) =>
         response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
       await orderRow.getByRole('combobox').selectOption(status);
@@ -682,12 +531,20 @@ test('customer review and return flows require delivery, publish through admin r
 
     await openAuthenticatedPage(page, adminSession, '/admin/reviews');
     const reviewRow = page.getByRole('row').filter({ hasText: reviewBody });
-    await expect(reviewRow).toContainText('Đã ẩn');
-    const reviewResponsePromise = page.waitForResponse((response) =>
+    await expect(reviewRow).toContainText('Đã duyệt');
+    // Admin ẩn đánh giá (isApproved = false -> Chờ duyệt)
+    const hideResponsePromise = page.waitForResponse((response) =>
+      response.url().match(/\/api\/admin\/reviews\/\d+$/) && response.request().method() === 'PATCH');
+    await reviewRow.getByRole('button', { name: 'Ẩn' }).click();
+    expect((await hideResponsePromise).status()).toBe(200);
+    await expect(reviewRow).toContainText('Chờ duyệt');
+
+    // Admin duyệt lại đánh giá (isApproved = true -> Đã duyệt)
+    const showResponsePromise = page.waitForResponse((response) =>
       response.url().match(/\/api\/admin\/reviews\/\d+$/) && response.request().method() === 'PATCH');
     await reviewRow.getByRole('button', { name: 'Hiện' }).click();
-    expect((await reviewResponsePromise).status()).toBe(200);
-    await expect(reviewRow).toContainText('Hiển thị');
+    expect((await showResponsePromise).status()).toBe(200);
+    await expect(reviewRow).toContainText('Đã duyệt');
     await openAuthenticatedPage(page, customerSession, `/products/${product.id}`);
     await expect(page.locator('.commerce-reviews')).toContainText(reviewBody);
     await expect(page.locator('.commerce-detail-info .commerce-product-rating')).toContainText('5.0');
@@ -701,8 +558,8 @@ test('customer review and return flows require delivery, publish through admin r
     await page.getByRole('button', { name: 'Gửi yêu cầu' }).click();
     const createReturnResponse = await createReturnPromise;
     expect(createReturnResponse.status()).toBe(201);
-    returnId = (await createReturnResponse.json()).data.id;
-    await expect(page.locator('.commerce-return-form')).toContainText('Đang chờ cửa hàng xem xét');
+    const returnId = (await createReturnResponse.json()).data.id;
+    await expect(page.locator('.commerce-return-form')).toContainText(RETURN_STATUS.PENDING);
 
     await openAuthenticatedPage(page, adminSession, '/admin/returns');
     const returnRow = page.getByRole('row').filter({ hasText: order.orderCode });
@@ -711,7 +568,7 @@ test('customer review and return flows require delivery, publish through admin r
       response.url().includes(`/api/admin/returns/${returnId}`) && response.request().method() === 'PATCH');
     await returnRow.getByRole('button', { name: 'Chấp nhận' }).click();
     expect((await approvePromise).status()).toBe(200);
-    await expect(returnRow.locator('td').nth(3)).toHaveText('Đã duyệt');
+    await expect(returnRow.locator('td').nth(3)).toHaveText(RETURN_STATUS.APPROVED);
 
     const completePromise = page.waitForResponse((response) =>
       response.url().includes(`/api/admin/returns/${returnId}`) && response.request().method() === 'PATCH');
@@ -719,63 +576,14 @@ test('customer review and return flows require delivery, publish through admin r
     const completeResponse = await completePromise;
     expect(completeResponse.status()).toBe(200);
     expect((await completeResponse.json()).data).toMatchObject({ restocked: true, refundProcessed: false });
-    await expect(returnRow.locator('td').nth(3)).toHaveText('Hoàn tất');
+    await expect(returnRow.locator('td').nth(3)).toHaveText(RETURN_STATUS.COMPLETED);
 
     await openAuthenticatedPage(page, customerSession, `/orders/${orderId}`);
-    await expect(page.locator('.commerce-return-form')).toContainText('Hoàn tất');
+    await expect(page.locator('.commerce-return-form')).toContainText(RETURN_STATUS.COMPLETED);
     await expect(page.locator('.commerce-return-form')).toContainText('Giftly chưa xử lý hoàn tiền tự động');
     const finalProducts = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
     expect((await finalProducts.json()).data.items.find((item) => item.id === product.id).stock).toBe(startingStock);
   } finally {
-    if (customerToken && adminToken && orderId) {
-      const customerAuth = { authorization: `Bearer ${customerToken}` };
-      const detailResponse = await api.get(`/api/orders/${orderId}`, { headers: customerAuth }).catch(() => null);
-      if (detailResponse?.ok()) {
-        const { data: order } = await detailResponse.json();
-        if (order.status === 'DELIVERED' && order.paymentStatus === 'PAID') {
-          let returns = await api.get(`/api/orders/${orderId}/returns`, { headers: customerAuth });
-          let requests = (await returns.json()).data;
-          if (!requests.some((item) => ['PENDING', 'APPROVED', 'COMPLETED'].includes(item.status))) {
-            await api.post(`/api/orders/${orderId}/returns`, {
-              headers: customerAuth,
-              data: { reason: 'Playwright cleanup return', details: 'Fixture cleanup only.' },
-            });
-            returns = await api.get(`/api/orders/${orderId}/returns`, { headers: customerAuth });
-            requests = (await returns.json()).data;
-          }
-          const request = requests[0];
-          if (request?.status === 'PENDING') {
-            await api.patch(`/api/admin/returns/${request.id}`, {
-              headers: { authorization: `Bearer ${adminToken}` }, data: { status: 'APPROVED', adminNote: 'E2E cleanup.' },
-            });
-            request.status = 'APPROVED';
-          }
-          if (request?.status === 'APPROVED') {
-            await api.patch(`/api/admin/returns/${request.id}`, {
-              headers: { authorization: `Bearer ${adminToken}` }, data: { status: 'COMPLETED', adminNote: 'E2E cleanup received.' },
-            });
-          }
-        } else if (order.paymentStatus === 'UNPAID') {
-          if (order.status === 'PENDING') {
-            await api.post(`/api/orders/${orderId}/cancel`, { headers: customerAuth });
-          } else {
-            await api.patch(`/api/admin/orders/${orderId}/status`, {
-              headers: { authorization: `Bearer ${adminToken}` }, data: { status: 'CANCELLED', note: 'Playwright E2E cleanup.' },
-            });
-          }
-        }
-      }
-    }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', customerEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
     await api.dispose();
   }
 });
@@ -786,13 +594,8 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
   const customerEmail = `e2e-coupon-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-coupon-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Coupon-Customer-2026!';
-  const adminPassword = 'E2E-Coupon-Admin-2026!';
+  const adminPassword = 'E2E-Admin-Coupon-2026!';
   const couponCode = `E2E-${randomUUID().replaceAll('-', '').toUpperCase()}`;
-  let customerSession;
-  let customerToken;
-  let adminSession;
-  let adminToken;
-  let orderId;
 
   try {
     const customerRegistration = await api.post('/api/auth/register', {
@@ -801,9 +604,8 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
     expect(customerRegistration.status()).toBe(201);
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.ok()).toBeTruthy();
-    customerSession = (await customerLogin.json()).data;
-    customerToken = customerSession.token;
-    const customerAuth = { authorization: `Bearer ${customerToken}` };
+    const customerSession = (await customerLogin.json()).data;
+    const customerAuth = { authorization: `Bearer ${customerSession.token}` };
 
     const adminRegistration = await api.post('/api/auth/register', {
       data: { fullName: 'Giftly coupon admin fixture', email: adminEmail, password: adminPassword },
@@ -816,8 +618,8 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
     });
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
-    adminSession = (await adminLogin.json()).data;
-    adminToken = adminSession.token;
+    const adminSession = (await adminLogin.json()).data;
+    const adminToken = adminSession.token;
 
     await openAuthenticatedPage(page, adminSession, '/admin/coupons');
     await page.getByLabel('Mã', { exact: true }).fill(couponCode);
@@ -863,7 +665,7 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
     await page.getByRole('button', { name: /Đặt hàng COD/ }).click();
     const orderResponse = await orderPromise;
     expect(orderResponse.status()).toBe(201);
-    orderId = (await orderResponse.json()).data.orderId;
+    const orderId = (await orderResponse.json()).data.orderId;
     const detailResponse = await api.get(`/api/orders/${orderId}`, { headers: customerAuth });
     expect(detailResponse.ok()).toBeTruthy();
     const detail = (await detailResponse.json()).data;
@@ -875,21 +677,81 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
     });
     expect((await couponList.json()).data.find((item) => item.code === couponCode).usedCount).toBe(1);
   } finally {
-    if (customerToken && orderId) {
-      await api.post(`/api/orders/${orderId}/cancel`, {
-        headers: { authorization: `Bearer ${customerToken}` },
-      });
+    await api.dispose();
+  }
+});
+
+test('demo account sees synthetic demo badge and disabled purchase button, while guest does not see synthetic product', async ({ page }) => {
+  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+
+  try {
+    // 1. Kiểm tra qua API catalog công khai: khách thường KHÔNG thấy sản phẩm synthetic
+    const catalogRes = await api.get('/api/products?limit=100');
+    expect(catalogRes.ok()).toBeTruthy();
+    const publicProducts = (await catalogRes.json()).data.items;
+    const syntheticInCatalog = publicProducts.find(
+      (p) => p.isSyntheticDisplay || p.name === 'Sản phẩm REES46 Demo Synthetic'
+    );
+    expect(syntheticInCatalog).toBeUndefined();
+
+    // 2. Kiểm tra trên giao diện catalog khách thường: không thấy sản phẩm synthetic
+    await page.goto('/products');
+    await expect(page.getByText('Sản phẩm REES46 Demo Synthetic')).not.toBeVisible();
+
+    // 3. Lấy trực tiếp ID sản phẩm synthetic từ database test
+    const mysql = require('../../core-backend/node_modules/mysql2/promise');
+    const conn = await mysql.createConnection({
+      host: process.env.DB_HOST || '127.0.0.1',
+      port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || 'rootpassword',
+      database: process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test',
+    });
+    let syntheticId;
+    try {
+      const [rows] = await conn.execute(
+        'SELECT id, name FROM products WHERE is_synthetic_display = TRUE LIMIT 1'
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      syntheticId = rows[0].id;
+    } finally {
+      await conn.end();
     }
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', customerEmail, couponCode], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
+
+    // 4. Khách thường gọi API chi tiết /api/products/:id của sản phẩm synthetic -> bị 404
+    const guestDetailRes = await api.get(`/api/products/${syntheticId}`);
+    expect(guestDetailRes.status()).toBe(404);
+
+    // 5. Đăng nhập bằng tài khoản demo (đã được tạo bởi globalSetup: email demo-ml@giftly.test)
+    const demoLogin = await api.post('/api/auth/login', {
+      data: { email: 'demo-ml@giftly.test', password: 'Demo-User-ML-2026!' },
     });
-    execFileSync('node', ['scripts/cleanupPlaywrightFixture.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
+    expect(demoLogin.ok()).toBeTruthy();
+    const demoSession = (await demoLogin.json()).data;
+    expect(demoSession.user.email).toBe('demo-ml@giftly.test');
+
+    // Xác minh tài khoản demo có thể truy cập thành công API chi tiết sản phẩm synthetic (200 OK)
+    const demoDetailRes = await api.get(`/api/products/${syntheticId}`, {
+      headers: { authorization: `Bearer ${demoSession.token}` },
     });
+    expect(demoDetailRes.ok()).toBeTruthy();
+    const detailData = (await demoDetailRes.json()).data;
+    expect(detailData.product.isSyntheticDisplay).toBe(true);
+
+    // 6. Mở trang chi tiết sản phẩm synthetic với session tài khoản demo trên trình duyệt
+    await openAuthenticatedPage(page, demoSession, `/products/${syntheticId}`);
+
+    // 7. Xác minh: Thấy badge "Sản phẩm demo, không đặt mua"
+    const demoBadge = page.locator('.commerce-badge-synthetic');
+    await expect(demoBadge).toBeVisible();
+    await expect(demoBadge).toContainText('Sản phẩm demo, không đặt mua');
+
+    // 8. Xác minh: Nút đặt mua bị vô hiệu hóa (disabled) và ghi rõ nhãn demo
+    const purchaseButton = page.locator('.commerce-detail-actions button.commerce-button');
+    await expect(purchaseButton).toBeVisible();
+    await expect(purchaseButton).toBeDisabled();
+    await expect(purchaseButton).toContainText('Sản phẩm demo, không đặt mua');
+  } finally {
     await api.dispose();
   }
 });

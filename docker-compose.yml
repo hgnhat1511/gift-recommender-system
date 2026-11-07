@@ -58,9 +58,13 @@ services:
       - DB_USER=root
       - DB_PASSWORD=rootpassword
       - DB_NAME=gift_ecommerce
+      - REDIS_HOST=redis-cache
+      - REDIS_PORT=6379
       - REDIS_URL=redis://redis-cache:6379
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_SERVICE_TIMEOUT_MS=1500
+      - JWT_SECRET=dev_secret_change_this_before_production_2026
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:5173
     depends_on:
       - mysql-db
       - redis-cache

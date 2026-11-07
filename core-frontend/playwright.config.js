@@ -6,6 +6,7 @@ const backendDirectory = path.resolve(process.cwd(), '../core-backend');
 const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
 
 export default defineConfig({
+  globalSetup: './e2e/global-setup.js',
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
