@@ -17,7 +17,7 @@ async function list(req, res, next) {
             FROM cart_items ci LEFT JOIN products p ON p.id=ci.product_id LEFT JOIN categories c ON c.id=p.category_id
             WHERE ci.user_id=? ORDER BY ci.created_at DESC`, [req.user.id]);
         const items = rows.map((row) => ({ cartItemId:String(row.cart_item_id), quantity:Number(row.quantity), selected:Boolean(row.is_selected),
-            product: row.id == null ? null : present(row), available: row.status === 'ACTIVE' && Number(row.stock) >= Number(row.quantity) }));
+            product: row.id == null ? null : present(row), available: row.status === 'ACTIVE' && !row.is_synthetic_display && Number(row.stock) >= Number(row.quantity) }));
         const selectedItems=items.filter((item)=>item.selected);
         const subtotal = selectedItems.reduce((total,item) => total + (item.product ? item.product.price * item.quantity : 0), 0);
         return res.json({ success: true, data: { items, itemCount: items.reduce((n,item) => n + item.quantity,0), selectedItemCount:selectedItems.reduce((n,item)=>n+item.quantity,0), subtotal } });
@@ -31,8 +31,12 @@ async function add(req, res, next) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [products] = await connection.execute("SELECT id,name,stock FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [productId]);
+        const [products] = await connection.execute("SELECT id,name,stock,is_synthetic_display FROM products WHERE id=? AND status='ACTIVE' FOR UPDATE", [productId]);
         if (!products[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Product not found or inactive.' }); }
+        if (products[0].is_synthetic_display) {
+            await connection.rollback();
+            return res.status(400).json({ success:false,message:'Sản phẩm mẫu thử nghiệm không thể thêm vào giỏ hàng.' });
+        }
         const [items] = await connection.execute('SELECT quantity FROM cart_items WHERE user_id=? AND product_id=? FOR UPDATE', [req.user.id,productId]);
         const inCart = Number(items[0]?.quantity || 0);
         const target = qty + inCart;
@@ -75,7 +79,7 @@ async function merge(req, res, next) {
 
         const placeholders = productIds.map(() => '?').join(',');
         const [products] = await connection.execute(
-            `SELECT id,name,stock,status FROM products WHERE id IN (${placeholders}) ORDER BY id FOR UPDATE`,
+            `SELECT id,name,stock,status,is_synthetic_display FROM products WHERE id IN (${placeholders}) ORDER BY id FOR UPDATE`,
             productIds
         );
         const byId = new Map(products.map((product) => [String(product.id), product]));
@@ -92,6 +96,10 @@ async function merge(req, res, next) {
             if (!product || product.status !== 'ACTIVE') {
                 await connection.rollback();
                 return res.status(409).json({ success:false,message:`A guest cart product is no longer available. Remove it and retry.`,data:{ productId, unavailable:true } });
+            }
+            if (product.is_synthetic_display) {
+                await connection.rollback();
+                return res.status(400).json({ success:false,message:`Sản phẩm "${product.name}" là sản phẩm mẫu thử nghiệm, không thể thêm vào giỏ hàng.`,data:{ productId, synthetic:true } });
             }
             if (total > Number(product.stock) || total > 99) {
                 await connection.rollback();
@@ -128,9 +136,13 @@ async function update(req, res, next) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [rows] = await connection.execute(`SELECT ci.id,p.id product_id,p.name,p.stock,p.status FROM cart_items ci JOIN products p ON p.id=ci.product_id
+        const [rows] = await connection.execute(`SELECT ci.id,p.id product_id,p.name,p.stock,p.status,p.is_synthetic_display FROM cart_items ci JOIN products p ON p.id=ci.product_id
             WHERE ci.id=? AND ci.user_id=? FOR UPDATE`, [itemId,req.user.id]);
         if (!rows[0]) { await connection.rollback(); return res.status(404).json({ success:false,message:'Cart item not found.' }); }
+        if (rows[0].is_synthetic_display) {
+            await connection.rollback();
+            return res.status(400).json({ success:false,message:'Sản phẩm mẫu thử nghiệm không thể cập nhật trong giỏ hàng.' });
+        }
         if (rows[0].status !== 'ACTIVE' || qty > Number(rows[0].stock)) {
             await connection.rollback();
             return res.status(409).json({

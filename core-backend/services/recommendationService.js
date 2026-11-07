@@ -177,6 +177,18 @@ async function recommendProducts(userId, limit) {
     };
     let hasSignals = false;
 
+    let mlUserId = null;
+    if (userId) {
+        try {
+            const [userRows] = await pool.execute('SELECT ml_user_id FROM users WHERE id = ? LIMIT 1', [userId]);
+            if (userRows.length && userRows[0].ml_user_id != null) {
+                mlUserId = Number(userRows[0].ml_user_id);
+            }
+        } catch {
+            mlUserId = null;
+        }
+    }
+
     if (userId) {
         const [events] = await pool.execute(`
             SELECT e.event_type, e.created_at, p.category_id, c.name AS category_name,
@@ -216,6 +228,7 @@ async function recommendProducts(userId, limit) {
         }
     }
 
+    const syntheticFilter = mlUserId ? '' : 'AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)';
     const exclusion = userId
         ? `AND p.id NOT IN (
             SELECT product_id FROM cart_items WHERE user_id = ?
@@ -242,7 +255,7 @@ async function recommendProducts(userId, limit) {
                 AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
             GROUP BY product_id
         ) pop ON pop.product_id = p.id
-        WHERE p.status = 'ACTIVE' AND p.stock > 0 ${exclusion}
+        WHERE p.status = 'ACTIVE' AND p.stock > 0 ${syntheticFilter} ${exclusion}
         ORDER BY p.is_featured DESC, p.created_at DESC, p.id DESC
         LIMIT 500`, params);
 
@@ -311,18 +324,6 @@ async function recommendProducts(userId, limit) {
     }));
 
     // 1. Thử gọi Ranker LC-1 (FastAPI) phục vụ xếp hạng thời gian thực
-    let mlUserId = null;
-    if (userId) {
-        try {
-            const [userRows] = await pool.execute('SELECT ml_user_id FROM users WHERE id = ? LIMIT 1', [userId]);
-            if (userRows.length && userRows[0].ml_user_id != null) {
-                mlUserId = Number(userRows[0].ml_user_id);
-            }
-        } catch {
-            mlUserId = null;
-        }
-    }
-
     const rankerRes = await askMlRanker(mlUserId, ranked, limit);
     if (rankerRes && Array.isArray(rankerRes.items) && rankerRes.items.length > 0 && (rankerRes.source === 'ranker_lc1' || rankerRes.source === 'popularity_fallback')) {
         return {

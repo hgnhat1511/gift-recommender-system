@@ -8,7 +8,7 @@ Giftly is a gift commerce project. The workspace contains React/Vite, Express 5,
 - `core-backend/`: Express 5 API, `mysql2`, bcryptjs, JWT và Redis health check.
 - `database/schema.sql`: schema nền ban đầu.
 - `database/migrations/`: migration lặp an toàn, gồm khởi tạo schema nền, nghiệp vụ cửa hàng, thanh toán và vận chuyển.
-- `ml-service/`: FastAPI content-based recommendation baseline; chưa có model được huấn luyện.
+- `ml-service/`: FastAPI service phục vụ mô hình học máy xếp hạng quà tặng Ranker LC-1 (LightGBM Ranker đã huấn luyện và đóng băng), tích hợp fallback Rule/TF-IDF và Popularity.
 
 ## Chạy local
 
@@ -160,7 +160,8 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 - Thanh toán chỉ COD; không có cổng thanh toán thật.
 - Admin lưu hãng vận chuyển, mã vận đơn và lịch sử cập nhật trong Giftly; khách xem được trên chi tiết đơn và nhận thông báo trong app. Chưa kết nối API hãng vận chuyển nên không có tracking thời gian thực.
 - Chưa cấu hình email provider: quên/đặt lại mật khẩu bị vô hiệu hóa, không tạo token giả.
-- `ml-service/main.py`, `requirements.txt` và dữ liệu huấn luyện hiện rỗng; chưa có model FastAPI. Gift Finder hiện dùng content matching theo metadata catalog, không tuyên bố là AI đã huấn luyện.
+- `ml-service`: Mô hình xếp hạng Ranker LC-1 (LightGBM) đã được huấn luyện trên tập dữ liệu REES46 eCommerce events, đạt NDCG@10 = 0.082260 (tập validation) và đã được đóng băng tại `ml-service/models/ranker_best_model.pkl` (SHA-256: `1d11488782894eae3b4eb142943303f4c9e85d0784f800047396d4f444eea8ff`). Mô hình được phục vụ online qua FastAPI endpoint `POST /recommend/rank` và `GET /health` (container `gift_ml_service`). Tuy nhiên, cá nhân hóa hiện tại chỉ áp dụng cho 3 tài khoản demo có `ml_user_id` liên kết REES46; khách vãng lai và tài khoản khác dùng fallback an toàn. Gift Finder hiện dùng content matching theo metadata catalog.
+- `docker compose`: Hiện tại trong cấu hình compose chỉ mới chạy container `ml-service` (cùng `mysql-db`, `redis-cache`). Các service `core-backend` và `core-frontend` hiện chạy cục bộ bằng tiến trình Node.js trên máy phát triển, chưa được container hóa toàn bộ trong compose.
 - Catalog demo dùng ảnh URL HTTPS bên ngoài; chưa có upload ảnh hoặc CMS cho nội dung tĩnh. Banner trang chủ được quản lý từ admin.
 - Guest cart rows in localStorage contain only product IDs, quantities and selection state. Prices and stock come from the catalog API and are revalidated in MySQL during merge. A conflict returns HTTP 409 and leaves the guest cart available for correction.
 - Trang chi tiết đơn có bản in từ snapshot đã lưu và có thể lưu PDF qua trình duyệt; chưa sinh PDF riêng ở server. Chưa có biến thể sản phẩm hoặc upload ảnh.
@@ -184,13 +185,25 @@ Admin quản lý banner tại `/admin/banners`. Migration `004_homepage_banners.
 Trong `/admin/coupons`, có thể chọn một hoặc nhiều danh mục. Không chọn danh mục thì coupon tiếp tục áp dụng toàn bộ sản phẩm như trước. Với coupon có giới hạn, backend chỉ giảm trên sản phẩm thuộc danh mục được chọn và so mức tối thiểu với subtotal đủ điều kiện; quote và checkout cùng dùng logic này trong MySQL. Ngày bắt đầu/kết thúc được nhập theo giờ địa phương của MySQL để tương thích các coupon hiện có.
 
 
-## Activity based product recommendations
+## Activity based product recommendations & ML Ranker LC-1
 
-The homepage can request `GET /api/products/recommendations?limit=4` and renders the result when products are available. The route is public and accepts an optional Bearer token. The default limit is 8; accepted limits are 1 through 20.
+Trang chủ gửi request `GET /api/products/recommendations?limit=8` và render kết quả gợi ý. Route này công khai và chấp nhận Bearer token tùy chọn (hỗ trợ limit từ 1 đến 20).
 
-A signed-in account receives `personalized_activity` when its recent product history matches available products. The baseline reads up to 300 product events from the last 180 days and up to 100 current favorites. It weights purchases (5), favorites (4), cart additions (3), recommendation clicks (2), and views (1), with a 90-day exponential decay. It compares category, occasion, recipient, interest, style, and gift-type attributes. Ranking also includes a small recent-popularity, rating, and featured-product score. Results require an active product with stock and omit products already in that account's cart or favorites. The response includes short explanation reasons for each product.
+### Cơ chế phục vụ gợi ý:
+1. **Tài khoản Demo REES46 (có `ml_user_id`):**
+   - Backend gọi trực tiếp FastAPI endpoint `POST /recommend/rank` tại `ml-service` (cổng 8000).
+   - Mô hình học máy LightGBM Ranker LC-1 (đã đóng băng) chấm điểm và xếp hạng thời gian thực dựa trên 31 đặc trưng (ItemKNN, TF-IDF, Popularity, lịch sử người dùng và mức tương thích).
+   - Response trả về nhãn `source: "ranker_lc1"` kèm các lý do gợi ý minh bạch (ví dụ: "Gợi ý từ tương quan ItemKNN", "Bạn đã từng thêm vào giỏ hàng", "Tương tác gần đây").
+2. **Khách vãng lai và Tài khoản thường (chưa có `ml_user_id`):**
+   - Hệ thống tự động kích hoạt bộ lọc bảo vệ: chỉ lấy 14 sản phẩm thật trong catalog, loại bỏ hoàn toàn 188 sản phẩm synthetic (`is_synthetic_display = TRUE`).
+   - Gợi ý chuyển sang fallback an toàn (`source: "python_content_baseline"` hoặc `"node_fallback"`) dựa trên mức độ quan tâm gần đây và thuộc tính danh mục quà tặng.
 
-Visitors and accounts without a matching activity profile receive `popular_cold_start`, which ranks currently available products using the same small popularity/rating/featured baseline. Homepage recommendation-card clicks are stored as `RECOMMENDATION_CLICK` product events. This is a deterministic Node.js baseline over catalog attributes and interaction history; it is not a trained machine-learning model. The optional Python FastAPI content baseline can rank the current Node catalog; it is not trained, and no AI accuracy claim is made.
+### Giới hạn kỹ thuật thực tế (Technical Limitations):
+- **Snapshot dữ liệu tĩnh:** Bộ đặc trưng và ma trận ItemKNN được huấn luyện trên snapshot tĩnh (tháng 01/2020) từ REES46 eCommerce events.
+- **Phạm vi cá nhân hóa:** Hiện tại chỉ có 3 tài khoản demo được liên kết `ml_user_id` sang REES46 để đi qua mô hình Ranker LC-1.
+- **Sản phẩm tổng hợp:** 188 sản phẩm REES46 hiển thị là dữ liệu tổng hợp (`is_synthetic_display = TRUE`) nhằm mục đích demo xếp hạng mô hình; ảnh sản phẩm lấy từ Unsplash cần được rà soát giấy phép bản quyền trước khi đưa vào kinh doanh thương mại.
+- **Chưa học trực tuyến:** Hệ thống gợi ý chưa tự động cập nhật trọng số mô hình hoặc học trực tuyến từ các tương tác mới phát sinh trên Giftly (retrain batch chưa kết nối online).
+- **Trạng thái Docker:** `docker compose` hiện chỉ chạy `ml-service` (`gift_ml_service`), `mysql-db` (`gift_mysql`) và `redis-cache` (`gift_redis`). `core-backend` và `core-frontend` vẫn chạy trực tiếp bằng Node.js ngoài Docker.
 
 Example response shape:
 

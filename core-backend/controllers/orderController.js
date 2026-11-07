@@ -19,10 +19,17 @@ const freeShippingMinimum = configuredAmount('FREE_SHIPPING_MINIMUM', 500000);
 async function quoteTotals(connection, userId, addressId, couponCode, lock = false, shippingMethod = 'STANDARD') {
     const [addresses] = await connection.execute('SELECT * FROM addresses WHERE id=? AND user_id=?', [addressId,userId]);
     if (!addresses[0]) return { error:'Choose a saved delivery address.' };
-    const [items] = await connection.execute(`SELECT ci.product_id,ci.quantity,p.name,p.image_url,p.price,p.stock,p.status,p.category_id,c.name category_name
+    const [items] = await connection.execute(`SELECT ci.product_id,ci.quantity,p.name,p.image_url,p.price,p.stock,p.status,p.is_synthetic_display,p.category_id,c.name category_name
         FROM cart_items ci LEFT JOIN products p ON p.id=ci.product_id LEFT JOIN categories c ON c.id=p.category_id
         WHERE ci.user_id=? AND ci.is_selected=1 ${lock ? 'FOR UPDATE' : ''}`, [userId]);
     if (!items.length) return { error:'Select at least one product from your cart.' };
+    const syntheticItem = items.find((item) => item.is_synthetic_display);
+    if (syntheticItem) {
+        return {
+            error: `Sản phẩm "${syntheticItem.name || 'trong giỏ'}" là sản phẩm mẫu thử nghiệm, không hỗ trợ đặt hàng.`,
+            data: { productId: syntheticItem.product_id }
+        };
+    }
     const unavailableItem = items.find((item) => !item.name || item.status !== 'ACTIVE');
     if (unavailableItem) {
         return {
@@ -122,12 +129,15 @@ async function create(req, res, next) {
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,initialStatus,'Khách đặt hàng']);
         const sortedItems = [...totals.items].sort((a, b) => Number(a.product_id) - Number(b.product_id));
         for (const item of sortedItems) {
-            const [updated] = await connection.execute('UPDATE products SET stock=stock-? WHERE id=? AND status=\'ACTIVE\' AND stock>=?', [item.quantity,item.product_id,item.quantity]);
+            const [updated] = await connection.execute("UPDATE products SET stock=stock-? WHERE id=? AND status='ACTIVE' AND (is_synthetic_display = FALSE OR is_synthetic_display IS NULL) AND stock>=?", [item.quantity,item.product_id,item.quantity]);
             if (updated.affectedRows !== 1) {
-                const [freshProducts] = await connection.execute('SELECT name, stock, status FROM products WHERE id=?', [item.product_id]);
+                const [freshProducts] = await connection.execute('SELECT name, stock, status, is_synthetic_display FROM products WHERE id=?', [item.product_id]);
                 const fresh = freshProducts[0];
                 if (!fresh || fresh.status !== 'ACTIVE') {
                     throw Object.assign(new Error(`Sản phẩm "${item.name}" hiện không còn kinh doanh.`), { httpStatus: 409 });
+                }
+                if (fresh.is_synthetic_display) {
+                    throw Object.assign(new Error(`Sản phẩm "${item.name}" là sản phẩm mẫu thử nghiệm, không thể đặt hàng.`), { httpStatus: 400 });
                 }
                 throw Object.assign(
                     new Error(`Sản phẩm "${item.name}" chỉ còn ${fresh.stock} trong kho (bạn đặt ${item.quantity}). Vui lòng cập nhật lại giỏ hàng.`),
@@ -202,7 +212,7 @@ async function reorderMine(req,res,next){
         let products=[];
         let cartRows=[];
         if(validIds.length>0){
-            const [pRows]=await connection.execute(`SELECT id,name,stock,status,price FROM products WHERE id IN (${validIds.map(()=>'?').join(',')}) ORDER BY id FOR UPDATE`,validIds);
+            const [pRows]=await connection.execute(`SELECT id,name,stock,status,price,is_synthetic_display FROM products WHERE id IN (${validIds.map(()=>'?').join(',')}) ORDER BY id FOR UPDATE`,validIds);
             products=pRows;
             const [cRows]=await connection.execute(`SELECT product_id,quantity FROM cart_items WHERE user_id=? AND product_id IN (${validIds.map(()=>'?').join(',')}) FOR UPDATE`,[req.user.id,...validIds]);
             cartRows=cRows;

@@ -93,6 +93,14 @@ function calculateReorderItems({ orderItems = [], products = [], cartItems = [] 
             });
             continue;
         }
+        if (product.is_synthetic_display) {
+            skippedItems.push({
+                productId: id,
+                name: product.name || item.name,
+                reason: `Sản phẩm "${product.name || item.name}" là sản phẩm mẫu thử nghiệm, không hỗ trợ mua lại.`
+            });
+            continue;
+        }
         const currentStock = Number(product.stock || 0);
         if (currentStock <= 0) {
             skippedItems.push({

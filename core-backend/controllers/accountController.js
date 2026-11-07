@@ -131,7 +131,7 @@ async function favorites(req, res, next) {
     try {
         const [rows] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM favorites f
             JOIN products p ON p.id=f.product_id LEFT JOIN categories c ON c.id=p.category_id
-            WHERE f.user_id=? AND p.status='ACTIVE' ORDER BY f.created_at DESC`, [req.user.id]);
+            WHERE f.user_id=? AND p.status='ACTIVE' AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL) ORDER BY f.created_at DESC`, [req.user.id]);
         const { present } = require('./catalogController');
         return res.json({ success: true, data: rows.map(present) });
     } catch (error) { return next(error); }
@@ -168,8 +168,19 @@ async function toggleFavorite(req, res, next) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const [[product]] = await connection.execute("SELECT id FROM products WHERE id=? AND status='ACTIVE'", [req.params.productId]);
+        const [[product]] = await connection.execute("SELECT id, is_synthetic_display FROM products WHERE id=? AND status='ACTIVE'", [req.params.productId]);
         if (!product) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Product not found.' }); }
+        if (product.is_synthetic_display) {
+            let isDemo = Boolean(req.user?.ml_user_id);
+            if (!isDemo && req.user?.id) {
+                const [[u]] = await connection.execute('SELECT ml_user_id FROM users WHERE id=? LIMIT 1', [req.user.id]);
+                isDemo = Boolean(u?.ml_user_id);
+            }
+            if (!isDemo) {
+                await connection.rollback();
+                return res.status(404).json({ success: false, message: 'Product not found.' });
+            }
+        }
         const [existing] = await connection.execute('SELECT 1 FROM favorites WHERE user_id=? AND product_id=?', [req.user.id,req.params.productId]);
         if (existing.length) await connection.execute('DELETE FROM favorites WHERE user_id=? AND product_id=?', [req.user.id,req.params.productId]);
         else await connection.execute('INSERT INTO favorites (user_id,product_id) VALUES (?,?)', [req.user.id,req.params.productId]);

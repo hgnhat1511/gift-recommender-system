@@ -30,7 +30,7 @@ async function list(req, res, next) {
             (minPrice !== null && maxPrice !== null && minPrice > maxPrice)) {
             return res.status(400).json({ success: false, message: 'Invalid pagination or price filter.' });
         }
-        const where = ["p.status = 'ACTIVE'"];
+        const where = ["p.status = 'ACTIVE'", "(p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)"];
         const params = [];
         if (req.query.q) {
             const q = String(req.query.q).trim().slice(0, 100).replace(/[\\%_]/g, '\\$&');
@@ -70,7 +70,7 @@ async function list(req, res, next) {
 async function categories(req, res, next) {
     try {
         const [rows] = await pool.query(`SELECT c.id,c.name,c.description,COUNT(p.id) product_count
-            FROM categories c LEFT JOIN products p ON p.category_id=c.id AND p.status='ACTIVE'
+            FROM categories c LEFT JOIN products p ON p.category_id=c.id AND p.status='ACTIVE' AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)
             WHERE c.is_active=1 GROUP BY c.id ORDER BY c.sort_order,c.name`);
         return res.json({ success: true, data: rows.map((row) => ({ id: String(row.id), name: row.name, description: row.description, productCount: Number(row.product_count) })) });
     } catch (error) { return next(error); }
@@ -85,7 +85,7 @@ async function lookup(req,res,next) {
         const placeholders = raw.map(() => '?').join(',');
         const [rows] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count
             FROM products p LEFT JOIN categories c ON c.id=p.category_id
-            WHERE p.id IN (${placeholders}) AND p.status='ACTIVE'`, raw);
+            WHERE p.id IN (${placeholders}) AND p.status='ACTIVE' AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)`, raw);
         return res.json({ success:true,data:rows.map(present) });
     } catch (error) { return next(error); }
 }
@@ -128,6 +128,16 @@ async function detail(req, res, next) {
             LEFT JOIN (SELECT product_id,AVG(rating) average_rating,COUNT(*) review_count FROM reviews WHERE is_approved=1 GROUP BY product_id) rv ON rv.product_id=p.id
             WHERE p.id=? AND p.status='ACTIVE' LIMIT 1`, [req.params.id]);
         if (!rows[0]) return res.status(404).json({ success: false, message: 'Product not found.' });
+        if (rows[0].is_synthetic_display) {
+            let isDemoUser = Boolean(req.user?.ml_user_id);
+            if (!isDemoUser && req.user?.id) {
+                const [[userCheck]] = await pool.execute('SELECT ml_user_id FROM users WHERE id=? LIMIT 1', [req.user.id]);
+                isDemoUser = Boolean(userCheck?.ml_user_id);
+            }
+            if (!isDemoUser) {
+                return res.status(404).json({ success: false, message: 'Product not found.' });
+            }
+        }
         await pool.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'VIEW')", [req.user?.id || null, req.params.id]);
         const [images] = await pool.execute('SELECT image_url,alt_text FROM product_images WHERE product_id=? ORDER BY sort_order,id', [req.params.id]);
         const product = { ...present(rows[0]), images:[
@@ -135,7 +145,7 @@ async function detail(req, res, next) {
             ...images.map((image)=>({url:image.image_url,altText:image.alt_text||rows[0].name}))
         ] };
         const [related] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p
-            LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='ACTIVE' AND p.category_id <=> ? AND p.id<>? ORDER BY p.is_featured DESC,p.id DESC LIMIT 4`, [rows[0].category_id, req.params.id]);
+            LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='ACTIVE' AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL) AND p.category_id <=> ? AND p.id<>? ORDER BY p.is_featured DESC,p.id DESC LIMIT 4`, [rows[0].category_id, req.params.id]);
         return res.json({ success: true, data: { product, related: related.map(present) } });
     } catch (error) { return next(error); }
 }
@@ -152,6 +162,7 @@ async function finder(req, res, next) {
         }
         const [rows] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p
             LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='ACTIVE' AND p.stock>0
+            AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)
             AND (? IS NULL OR p.price<=?) ORDER BY p.is_featured DESC,p.id DESC LIMIT 200`, [budget, budget]);
         const norm = (value) => String(value || '').trim().toLowerCase();
         const scored = rows.map((row) => {
@@ -194,7 +205,13 @@ async function track(req, res, next) {
         }
         let contextJson=null;
         if(context!=null){contextJson=JSON.stringify(context);if(contextJson.length>2000)return res.status(400).json({success:false,message:'Event context is too large.'})}
-        if(productId!=null){const [[product]]=await pool.execute('SELECT id FROM products WHERE id=?',[productId]);if(!product)return res.status(404).json({success:false,message:'Product not found.'})}
+        if(productId!=null){
+            const [[product]]=await pool.execute('SELECT id,is_synthetic_display FROM products WHERE id=?',[productId]);
+            if(!product)return res.status(404).json({success:false,message:'Product not found.'});
+            if(product.is_synthetic_display && !req.user?.ml_user_id){
+                return res.status(404).json({success:false,message:'Product not found.'});
+            }
+        }
         await pool.execute('INSERT INTO product_events (user_id,product_id,event_type,search_term,context) VALUES (?,?,?,?,?)',
             [req.user?.id || null, productId || null, eventType, searchTerm || null, contextJson]);
         return res.status(202).json({ success: true });
