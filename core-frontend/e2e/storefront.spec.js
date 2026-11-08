@@ -681,22 +681,25 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
   }
 });
 
-test('demo account sees synthetic demo badge and disabled purchase button, while guest does not see synthetic product', async ({ page }) => {
+test('quyết định A: khách xem được sản phẩm demo trên catalog với nhãn không đặt mua, demo account xem được chi tiết', async ({ page }) => {
   const api = await request.newContext({ baseURL: 'http://localhost:5000' });
 
   try {
-    // 1. Kiểm tra qua API catalog công khai: khách thường KHÔNG thấy sản phẩm synthetic
+    // 1. Kiểm tra qua API catalog công khai: khách xem được cả sản phẩm synthetic (Quyết định A)
     const catalogRes = await api.get('/api/products?limit=100');
     expect(catalogRes.ok()).toBeTruthy();
     const publicProducts = (await catalogRes.json()).data.items;
     const syntheticInCatalog = publicProducts.find(
       (p) => p.isSyntheticDisplay || p.name === 'Sản phẩm Demo Synthetic Lifestyle'
     );
-    expect(syntheticInCatalog).toBeUndefined();
+    expect(syntheticInCatalog).toBeDefined();
+    expect(syntheticInCatalog.isSyntheticDisplay).toBe(true);
 
-    // 2. Kiểm tra trên giao diện catalog khách thường: không thấy sản phẩm synthetic
+    // 2. Kiểm tra trên giao diện catalog khách: thấy sản phẩm demo và nút "Không đặt mua" bị disabled
     await page.goto('/products');
-    await expect(page.getByText('Sản phẩm Demo Synthetic Lifestyle')).not.toBeVisible();
+    const demoCard = page.locator('.commerce-product').filter({ hasText: 'Sản phẩm Demo Synthetic Lifestyle' });
+    await expect(demoCard).toBeVisible();
+    await expect(demoCard.getByRole('button', { name: 'Không đặt mua' })).toBeDisabled();
 
     // 3. Lấy trực tiếp ID sản phẩm synthetic từ database test
     const mysql = require('../../core-backend/node_modules/mysql2/promise');

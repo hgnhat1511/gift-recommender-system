@@ -144,7 +144,7 @@ def main():
 
         cat_code = info["category_code"].strip()
         if cat_code in ("unknown", "none", "nan", ""):
-            cat_display = "Phong cách sống & Quà tặng"
+            cat_display = "Phong cách sống & Tiện ích"
         else:
             parts = [p.capitalize() for p in cat_code.split(".") if p]
             cat_display = " ".join(parts)

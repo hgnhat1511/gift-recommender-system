@@ -30,7 +30,7 @@ async function list(req, res, next) {
             (minPrice !== null && maxPrice !== null && minPrice > maxPrice)) {
             return res.status(400).json({ success: false, message: 'Invalid pagination or price filter.' });
         }
-        const where = ["p.status = 'ACTIVE'", "(p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)"];
+        const where = ["p.status = 'ACTIVE'"];
         const params = [];
         if (req.query.q) {
             const q = String(req.query.q).trim().slice(0, 100).replace(/[\\%_]/g, '\\$&');

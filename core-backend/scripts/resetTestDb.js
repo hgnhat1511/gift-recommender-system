@@ -167,7 +167,8 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
                 { category: 'Hoa & cây', products: [
                     ['Chậu sen đá để bàn', 'Chậu sen đá nhỏ gọn, dễ chăm sóc trong không gian sáng.', 129000, 15, 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&w=800&q=85', ['housewarming','birthday'], ['colleague','friend','mother'], ['gardening','plants'], 'natural', 'plant', true],
                     ['Giỏ hoa chúc mừng', 'Giỏ hoa tươi trang nhã dùng trong dịp chúc mừng.', 590000, 6, 'https://images.unsplash.com/photo-1525310072745-f49212b5ac6d?auto=format&fit=crop&w=800&q=85', ['promotion','graduation'], ['teacher','manager','mother'], ['flowers','gardening'], 'classic', 'flowers', false]
-                ]}
+                ]},
+                { category: 'Lifestyle', products: [] }
             ];
 
             for (const group of catalog) {
