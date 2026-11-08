@@ -50,30 +50,25 @@ test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
         assert.equal(lifestyleCat[0].name, 'Lifestyle');
     });
 
-    await t.test('2. Catalog đúng sản phẩm active và mọi ml_product_id thuộc pool LC-1', async () => {
+    await t.test('2. Catalog đúng 1.000 sản phẩm active và mọi ml_product_id thuộc pool LC-1', async () => {
         const [[activeSynthetic]] = await conn.execute(
             "SELECT COUNT(*) total, COUNT(DISTINCT ml_product_id) unique_ml FROM products WHERE is_synthetic_display = TRUE AND status = 'ACTIVE'"
         );
-        if (dbName === 'gift_ecommerce') {
-            assert.equal(activeSynthetic.total, 1000, 'Số lượng sản phẩm synthetic active phải đúng chính xác 1.000 trên DB dev');
-            assert.equal(activeSynthetic.unique_ml, 1000, 'Tất cả 1.000 sản phẩm phải có ml_product_id duy nhất, không trùng lặp');
+        assert.equal(activeSynthetic.total, 1000, 'Số lượng sản phẩm synthetic active phải đúng chính xác 1.000');
+        assert.equal(activeSynthetic.unique_ml, 1000, 'Tất cả 1.000 sản phẩm phải có ml_product_id duy nhất, không trùng lặp');
 
-            // Đối chiếu với file danh sách selected_1000_ids.json
-            const idsPath = path.join(__dirname, '..', 'data', 'selected_1000_ids.json');
-            assert.ok(fs.existsSync(idsPath), 'File selected_1000_ids.json phải tồn tại');
-            const selectedIds = JSON.parse(fs.readFileSync(idsPath, 'utf8'));
-            assert.equal(selectedIds.length, 1000);
+        // Đối chiếu với file danh sách selected_1000_ids.json
+        const idsPath = path.join(__dirname, '..', 'data', 'selected_1000_ids.json');
+        assert.ok(fs.existsSync(idsPath), 'File selected_1000_ids.json phải tồn tại');
+        const selectedIds = JSON.parse(fs.readFileSync(idsPath, 'utf8'));
+        assert.equal(selectedIds.length, 1000);
 
-            const [dbRows] = await conn.execute(
-                "SELECT ml_product_id FROM products WHERE is_synthetic_display = TRUE AND status = 'ACTIVE'"
-            );
-            const dbIdSet = new Set(dbRows.map(r => Number(r.ml_product_id)));
-            for (const pid of selectedIds) {
-                assert.ok(dbIdSet.has(Number(pid)), `ml_product_id ${pid} phải tồn tại trong database`);
-            }
-        } else {
-            // Trên DB test chuyên biệt (giftly_e2e_test): kiểm tra tính toàn vẹn của sản phẩm synthetic fixture
-            assert.ok(Number(activeSynthetic.total) >= 0, 'DB test có bảng products hợp lệ');
+        const [dbRows] = await conn.execute(
+            "SELECT ml_product_id FROM products WHERE is_synthetic_display = TRUE AND status = 'ACTIVE'"
+        );
+        const dbIdSet = new Set(dbRows.map(r => Number(r.ml_product_id)));
+        for (const pid of selectedIds) {
+            assert.ok(dbIdSet.has(Number(pid)), `ml_product_id ${pid} phải tồn tại trong database`);
         }
     });
 
@@ -81,16 +76,12 @@ test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
         const [[simOrders]] = await conn.execute(
             "SELECT COUNT(*) total FROM orders WHERE is_simulated = 1"
         );
-        if (dbName === 'gift_ecommerce') {
-            assert.ok(simOrders.total >= 2000, `Số đơn hàng mô phỏng phải >= 2000 (thực tế: ${simOrders.total})`);
+        assert.ok(simOrders.total >= 2000, `Số đơn hàng mô phỏng phải >= 2000 (thực tế: ${simOrders.total})`);
 
-            const [[simEvents]] = await conn.execute(
-                "SELECT COUNT(*) total FROM product_events WHERE is_simulated = 1"
-            );
-            assert.ok(simEvents.total >= 20000, `Số sự kiện mô phỏng phải >= 20000 (thực tế: ${simEvents.total})`);
-        } else {
-            assert.ok(Number(simOrders.total) >= 0, 'Cột is_simulated tồn tại trên bảng orders');
-        }
+        const [[simEvents]] = await conn.execute(
+            "SELECT COUNT(*) total FROM product_events WHERE is_simulated = 1"
+        );
+        assert.ok(simEvents.total >= 20000, `Số sự kiện mô phỏng phải >= 20000 (thực tế: ${simEvents.total})`);
 
         // Đảm bảo không đơn hàng mô phỏng nào có is_simulated = 0
         const [badSimOrders] = await conn.execute(
@@ -132,17 +123,10 @@ test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
         if (demoUsers.length) {
             const demoRec = await recommendProducts(demoUsers[0].id, 8);
             assert.ok(demoRec.items.length > 0, 'Gợi ý cho tài khoản demo không được rỗng');
-            if (dbName === 'gift_ecommerce') {
-                assert.ok(
-                    demoRec.source === 'ranker_lc1' || demoRec.source === 'popularity_fallback',
-                    `Nguồn gợi ý của demo user phải là ranker_lc1 hoặc popularity_fallback (thực tế: ${demoRec.source})`
-                );
-            } else {
-                assert.ok(
-                    ['ranker_lc1', 'popularity_fallback', 'python_content_baseline', 'node_fallback'].includes(demoRec.source),
-                    `Nguồn gợi ý trên DB test phải là nguồn hợp lệ (thực tế: ${demoRec.source})`
-                );
-            }
+            assert.ok(
+                demoRec.source === 'ranker_lc1' || demoRec.source === 'popularity_fallback',
+                `Nguồn gợi ý của demo user phải là ranker_lc1 hoặc popularity_fallback (thực tế: ${demoRec.source})`
+            );
         }
     });
 });

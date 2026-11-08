@@ -15,18 +15,18 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 1. Không sửa đổi artifact mô hình LC-1; SHA-256 được bảo toàn nguyên vẹn 100%.
 2. Không thực hiện `docker compose down -v`, không `DROP/TRUNCATE` database phát triển `gift_ecommerce`.
 3. Toàn bộ thao tác ghi kiểm thử đều được cách ly trên database `giftly_e2e_test`.
-4. Mọi giao dịch và sự kiện mô phỏng đều mang cờ cách ly `is_simulated = 1`, không làm rò rỉ vào luồng mua sắm hoặc profile của khách.
-5. Quyết định A: Khách xem được 1.000 sản phẩm demo REES46 trên catalog công khai với nhãn trung tính *"Phong cách sống & Tiện ích"*, nút mua bị vô hiệu hóa (*"Không đặt mua"*).
-6. Quyết định B: Đơn mô phỏng không ảnh hưởng gợi ý LC-1; mô hình Ranker sử dụng snapshot đặc trưng tĩnh đóng băng tại mốc cutoff 2020-01-15.
+4. Mọi giao dịch và sự kiện mô phỏng đều mang cờ cách ly `is_simulated = 1`, không làm rò rỉ vào luồng tính toán tín hiệu người dùng của khách thật.
+5. Quyết định A: Khách xem được 1.000 sản phẩm demo REES46 trên catalog công khai và trang chi tiết ở chế độ chỉ xem với banner *"Dữ liệu mẫu từ bộ REES46, dùng cho demo."*, nút mua bị vô hiệu hóa (*"Không đặt mua"*), chặn thêm vào giỏ hàng (`POST /cart/items` trả 400).
+6. Quyết định B: Đơn mô phỏng không ảnh hưởng gợi ý LC-1; mô hình Ranker sử dụng snapshot đặc trưng tĩnh đóng băng tại mốc cutoff 2020-01-15 nên cả đơn mô phỏng lẫn đơn thật trong MySQL đều không làm thay đổi thứ tự xếp hạng của mô hình Ranker.
 
 | Bước | Nội dung công việc | Trạng thái | Mức xác minh | Bằng chứng / File mã nguồn |
 | :--- | :--- | :---: | :---: | :--- |
 | **Bước 1** | Kiểm tra hiện trạng & Baseline | Hoàn thành | Đã chạy xác minh | `docker ps`, `git branch -vv`, baseline test pass |
-| **Bước 2** | Chuẩn hóa nhãn trung tính Lifestyle & Banner dữ liệu mẫu | Hoàn thành | Đã chạy xác minh & Có code | `importReesCatalog.js`, `CatalogPages.jsx:62,89,104-107`, `App.jsx:518` |
-| **Bước 3** | Mở rộng Catalog 1.000 sản phẩm từ REES46 (Quyết định A) | Hoàn thành | Đã chạy xác minh & Có code | `catalogController.js:33`, `select1000Catalog.py`, `import1000Catalog.js` |
-| **Bước 4** | Sinh 22.926 tương tác & 2.000 đơn hàng mô phỏng | Hoàn thành | Đã chạy xác minh & Có code | `012_simulation_flags.sql`, `simulateTransactions.js`, `orderController.js:145` |
+| **Bước 2** | Chuẩn hóa nhãn trung tính Lifestyle & Banner dữ liệu mẫu | Hoàn thành | Đã chạy xác minh & Có code | `importReesCatalog.js`, `CatalogPages.jsx`, `App.jsx` |
+| **Bước 3** | Mở rộng Catalog 1.000 sản phẩm từ REES46 (Quyết định A) | Hoàn thành | Đã chạy xác minh & Có code | `catalogController.js`, `CatalogPages.jsx`, `select1000Catalog.py` |
+| **Bước 4** | Sinh 22.926 tương tác & 2.000 đơn hàng mô phỏng | Hoàn thành | Đã chạy xác minh & Có code | `012_simulation_flags.sql`, `simulateTransactions.js` |
 | **Bước 5** | Phục vụ gợi ý (Serving), kiểm chứng B & Đo độ trễ | Hoàn thành | Đã chạy xác minh & Có code | `simulation-impact.test.js`, đo độ trễ 3 điều kiện, P50 = 54.29 ms |
-| **Bước 6** | Kiểm thử toàn diện (Backend, Frontend Unit, E2E) | Hoàn thành | Đã chạy xác minh | Backend: 108/110 pass (2 skip), Frontend: 24/24 pass, E2E: 10/10 pass |
+| **Bước 6** | Kiểm thử toàn diện (Backend, Frontend Unit, E2E) | Hoàn thành | Đã chạy xác minh | Backend: 110/112 pass (2 skip), Frontend: 24/24 pass, E2E: 10/10 pass |
 | **Bước 7** | Đóng gói Docker Compose & Thử nghiệm Fresh Stack | Báo cáo chi tiết | Đã chạy xác minh | Stack chính: 5 container Up/Healthy; Fresh stack song song bằng compose gốc: **CHƯA ĐẠT** (xung đột `container_name`); Verify độc lập qua compose phụ: **ĐẠT** |
 | **Bước 8** | Báo cáo nghiệm thu & Commit Git địa phương | Hoàn thành | Đã chạy xác minh | `docs/GIFTLY_FINAL_REPORT.md`, commit theo từng việc cụ thể |
 
@@ -43,7 +43,7 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 * **Kiểm tra SHA-256 Artifact LC-1:**
   * Lệnh: `Get-FileHash ml-service\models\ranker_best_model.pkl -Algorithm SHA256`
   * Kết quả: `1D11488782894EAE3B4EB142943303F4C9E85D0784F800047396D4F444EEA8FF` (Khớp 100% với chữ ký ban đầu ở cả hai repo).
-* **Kết quả kiểm thử Baseline:**
+* **Kết quả kiểm thử Baseline ban đầu:**
   * Backend Unit & Contract Tests: 98 passed, 2 skipped (tổng 100 tests).
   * Frontend Unit Tests: 24/24 passed.
   * Playwright E2E Tests: 10/10 passed.
@@ -62,21 +62,24 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 * **Hiển thị Banner Dữ liệu mẫu:**
   * Bổ sung styling banner `.commerce-demo-banner` tại `core-frontend/src/pages/store/commerce.css`.
   * Hiển thị banner thông báo *"Dữ liệu mẫu từ bộ REES46, dùng cho demo."* trên các trang:
-    * Trang chủ (`core-frontend/src/App.jsx`, dòng 518).
-    * Danh sách sản phẩm (`core-frontend/src/pages/store/CatalogPages.jsx`, dòng 62).
-    * Chi tiết sản phẩm (`core-frontend/src/pages/store/CatalogPages.jsx`, dòng 89).
+    * Trang chủ (`core-frontend/src/App.jsx`).
+    * Danh sách sản phẩm (`core-frontend/src/pages/store/CatalogPages.jsx`).
+    * Chi tiết sản phẩm (`core-frontend/src/pages/store/CatalogPages.jsx`).
 * **Phân định ranh giới Gift Finder:**
-  * Tại `core-frontend/src/pages/store/CatalogPages.jsx` (dòng 104-107): Thể hiện rõ ràng nhãn tính năng lọc theo quy tắc metadata do hệ thống định nghĩa (Rule-based metadata baseline), chưa áp dụng mô hình học máy LC-1.
+  * Tại `core-frontend/src/pages/store/CatalogPages.jsx`: Thể hiện rõ ràng nhãn tính năng lọc theo quy tắc metadata do hệ thống định nghĩa (Rule-based metadata baseline), chưa áp dụng mô hình học máy LC-1.
 
 ---
 
 ### 3. BƯỚC 3: MỞ RỘNG CATALOG 1.000 SẢN PHẨM & QUYẾT ĐỊNH A
 * **Mức xác minh:** *Đã chạy xác minh (lệnh + output thô) & Có code*.
-* **Quyết định A (Storefront công khai cho khách xem sản phẩm demo):**
+* **Quyết định A (Storefront công khai cho khách xem sản phẩm demo ở chế độ chỉ xem):**
   * Khách thường và khách vãng lai được phép xem danh sách 1.000 sản phẩm demo REES46 trên catalog công khai:
-    * Tại `core-backend/controllers/catalogController.js` (dòng 33): Bỏ điều kiện lọc `is_synthetic_display`, cho phép trả về sản phẩm demo.
-    * Nút mua hàng của sản phẩm demo bị vô hiệu hóa trên giao diện (`disabled`, hiển thị *"Không đặt mua"*).
-    * Khách thường không thể thêm vào giỏ hàng (`POST /cart/items` chặn 400), không thể checkout, và không xem được chi tiết (`GET /products/:id` chặn 404 cho khách không phải tài khoản demo).
+    * Tại `core-backend/controllers/catalogController.js`: Cho phép trả về sản phẩm demo kèm trường `isSyntheticDisplay: true`.
+    * Khách mở trang chi tiết sản phẩm demo bình thường ở chế độ chỉ xem (`GET /products/:id` trả về thông tin sản phẩm và cờ `isSyntheticDisplay: true`).
+    * Nút mua hàng trên giao diện chuyển sang nhãn *"Không đặt mua"* và bị vô hiệu hóa (`disabled={!p.stock || p.isSyntheticDisplay}`).
+    * Hàm thêm giỏ hàng phía frontend có bảo vệ chặn click `if (p.isSyntheticDisplay) return;`.
+    * Nếu cố tình gửi request thêm vào giỏ hàng (`POST /cart/items`), backend sẽ từ chối 400: *"Sản phẩm mẫu demo, không áp dụng đặt mua"*.
+    * Khách không thể checkout hoặc mua sản phẩm demo này dưới bất kỳ hình thức nào.
 * **Script phân tầng và tạo dữ liệu (`core-backend/scripts/select1000Catalog.py`):**
   * Sử dụng random seed = 42 cố định.
   * Phân tầng mẫu theo `category_id` và `category_code` từ tập dữ liệu REES46 gốc (`sampled_events.parquet`).
@@ -112,12 +115,16 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 * **Mức xác minh:** *Đã chạy xác minh (lệnh + output thô) & Có code*.
 * **Kiểm chứng B: Đơn mô phỏng có ảnh hưởng gợi ý không (`simulation-impact.test.js`):**
   * **Bằng chứng thực nghiệm thu được:**
-    * Trước khi thêm đơn mô phỏng: Xếp hạng ML Ranker `/recommend/rank` trả về `source: 'ranker_lc1'`, thứ tự ứng viên: `[5804261, 5809910, 5804262, 5885786, 5834419]`.
-    * Chèn 1 đơn hàng mô phỏng (`is_simulated = 1`) và sự kiện `PURCHASE` (`is_simulated = 1`) vào MySQL.
-    * Sau khi thêm đơn mô phỏng: Xếp hạng ML Ranker `/recommend/rank` trả về `source: 'ranker_lc1'`, thứ tự ứng viên: `[5804261, 5809910, 5804262, 5885786, 5834419]`.
-    * Điểm số và thứ tự **TRÙNG KHỚP 100%**.
-    * **Kết luận khoa học:** Đơn mô phỏng KHÔNG ảnh hưởng kết quả gợi ý LC-1. Mô hình Ranker sử dụng snapshot đặc trưng tĩnh đóng băng lúc huấn luyện tại mốc cutoff 2020-01-15 (`ranker_val_full.parquet`), hoàn toàn không truy cập MySQL và không cập nhật online từ đơn mô phỏng.
-    * Tại tầng ứng dụng Giftly (`recommendProducts`): Mọi câu truy vấn tín hiệu người dùng và độ phổ biến đều chứa điều kiện `AND (is_simulated = 0 OR is_simulated IS NULL)`, chủ động loại bỏ hoàn toàn các sự kiện mô phỏng khỏi luồng tính toán.
+    1. **Tại microservice ML Ranker (`POST /recommend/rank` trên FastAPI):**
+       * Kiểm thử trên người dùng demo có `ml_user_id = 27692594`.
+       * Thứ tự ứng viên trước khi chèn đơn: `[5804261, 5809910, 5804262, 5885786, 5834419]`.
+       * Sau khi chèn 1 đơn hàng mô phỏng (`is_simulated = 1`) và sự kiện `PURCHASE` (`is_simulated = 1`) vào MySQL, thứ tự ứng viên trả về từ Ranker: `[5804261, 5809910, 5804262, 5885786, 5834419]`.
+       * Điểm số và thứ tự **TRÙNG KHỚP 100%**.
+       * **Bản chất kỹ thuật:** Service ML Ranker (`ml-service/app/services/ranker_service.py:45-50`) là mô hình phục vụ offline; nó nạp đặc trưng tĩnh người dùng và sản phẩm từ snapshot file parquet đóng băng tại mốc cutoff 2020-01-15 (`ranker_val_full.parquet`). Service ML hoàn toàn không kết nối tới MySQL và không cập nhật đặc trưng online. Do đó, **cả đơn mô phỏng lẫn đơn thật trong MySQL đều không làm thay đổi thứ tự xếp hạng của mô hình Ranker LC-1**.
+    2. **Tại tầng ứng dụng Backend Giftly (`recommendProducts` tại `core-backend/services/recommendationService.js:241-262`):**
+       * Câu lệnh SQL truy vấn sự kiện tương tác để tính tín hiệu `hasSignals` có điều kiện lọc tường minh `AND (e.is_simulated = 0 OR e.is_simulated IS NULL)`.
+       * **Đối chiếu mô phỏng:** Thêm sự kiện `is_simulated = 1` không làm đổi phương thức gợi ý, hệ thống giữ nguyên `popular_cold_start`.
+       * **Đối chứng dương (Real event):** Khi thêm một sự kiện tương tác thật `is_simulated = 0` cho người dùng, phương thức gợi ý chuyển từ `popular_cold_start` sang `personalized_activity` trên tầng backend Giftly.
 * **Làm rõ kích thước Candidate Pool 30.376 vs 32.973:**
   * **32.973:** Là Global Candidate Pool theo Tiêu chí E (`ml_pipeline/data.py:224-241`), bao gồm toàn bộ sản phẩm có tương tác trong 30 ngày trước mốc cutoff 2020-01-15 trên tập `sampled_events.parquet`.
   * **30.376:** Là số sản phẩm duy nhất thực tế xuất hiện trong file serving `data/processed/ranker_val_full.parquet` do module `CandidateGenerator` (ItemKNN 50 + CBF 30 + Pop 40) sinh ra cho 7.441 validation users và được `RankerService` nạp vào bộ nhớ lúc khởi động. (Có 2.597 sản phẩm trong 32.973 không được kênh nào đề cử cho 7.441 user này).
@@ -140,8 +147,11 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 ### 6. BƯỚC 6: KIỂM THỬ TOÀN DIỆN (Comprehensive Test Suite)
 * **Mức xác minh:** *Đã chạy xác minh (lệnh + output thô)*.
 * **Bộ kiểm thử Backend (`node --test --test-reporter=spec --test-concurrency=1` trên `giftly_e2e_test`):**
-  * Tổng số bài kiểm thử: **110 tests** (15 test suites).
-  * Kết quả: **108 passed, 2 skipped, 0 failed** (Tỷ lệ pass: **100%** bài kích hoạt).
+  * Tổng số bài kiểm thử: **112 tests** (21 test suites).
+  * Kết quả: **110 passed, 2 skipped, 0 failed** (Tỷ lệ pass: **100%** các bài kiểm thử kích hoạt).
+  * **Chi tiết 2 bài test tạm skip:**
+    1. File `core-backend/test/cart-inventory.test.js`: Test *"Integration: Cart and order inventory checkout atomic rollback (requires TEST_DB_NAME)"*. Lý do: Test integration này yêu cầu truyền biến môi trường `TEST_DB_NAME` cụ thể khi chạy đơn lẻ để tránh tác động vào DB phát triển chính, tự động skip khi chạy chung qua test suite chuẩn.
+    2. File `core-backend/test/integration/commerce.e2e.test.js`: Test *"Gift Finder, checkout, VNPAY/GHN callbacks and return inventory keep commerce states consistent"*. Lý do: Test tích hợp toàn trình đa service cũng có guard yêu cầu `TEST_DB_NAME` để bảo vệ an toàn dữ liệu.
   * Bảng phân bổ chi tiết theo từng file:
 
 | STT | Tên file kiểm thử Backend | Số test | Pass | Skip | Mục tiêu kiểm thử |
@@ -151,7 +161,7 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 | 3 | `cart-merge-contract.test.js` | 5 | 5 | 0 | Gộp giỏ khách vãng lai khi đăng nhập |
 | 4 | `db-guard.test.js` | 1 | 1 | 0 | Kiểm tra bảo vệ tên DB test kết thúc bằng `_test` |
 | 5 | `ghn-provider.test.js` | 6 | 6 | 0 | Tích hợp đơn vị vận chuyển Giao Hàng Nhanh |
-| 6 | `giftly-final-verification.test.js` | 7 | 7 | 0 | Bộ test nghiệm thu GIFTLY-FINAL (catalog, sim, bảo vệ) |
+| 6 | `giftly-final-verification.test.js` | 7 | 7 | 0 | Bộ test nghiệm thu gốc: catalog, đơn sim, cờ bảo vệ |
 | 7 | `loginRateLimiter.test.js` | 1 | 1 | 0 | Giới hạn tốc độ đăng nhập chống brute-force |
 | 8 | `order-contract.test.js` | 24 | 24 | 0 | Hợp đồng API đặt hàng và thanh toán |
 | 9 | `order-inventory-reasons.test.js` | 8 | 8 | 0 | Kiểm soát biến động kho và lý do tiếng Việt |
@@ -160,21 +170,21 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 | 12 | `recommendation-bridge.test.js` | 2 | 2 | 0 | Cầu nối metadata và normalized preferences |
 | 13 | `recommendation-ml-bridge.test.js` | 7 | 7 | 0 | Fallback an toàn và chuyển tiếp đúng nhãn ranker |
 | 14 | `shipment-status-sync.test.js` | 3 | 3 | 0 | Đồng bộ nhãn vận chuyển và đổi trả |
-| 15 | `simulation-impact.test.js` | 3 | 3 | 0 | Kiểm chứng B: Đơn mô phỏng không ảnh hưởng gợi ý LC-1 |
-| 16 | `synthetic-products-protection.test.js` | 7 | 7 | 0 | Chặn sản phẩm synthetic khỏi storefront & reorder |
+| 15 | `simulation-impact.test.js` | 4 | 4 | 0 | Kiểm chứng B: Đối chứng âm mô phỏng, đối chứng dương thật |
+| 16 | `synthetic-products-protection.test.js` | 8 | 8 | 0 | Khách xem demo chỉ xem OK; chặn thêm giỏ hàng 400 |
 | 17 | `vnpay.test.js` | 3 | 3 | 0 | Ký số và xác thực callback cổng VNPAY |
 | 18 | `cod-order-lifecycle.test.js` | 1 | 1 | 0 | Tích hợp vòng đời đơn COD trên DB test |
 | 19 | `commerce.e2e.test.js` | 1 | 0 | 1 | Tích hợp thương mại tổng thể (skip khi không truyền TEST_DB_NAME) |
 | 20 | `order-shipment-race.test.js` | 1 | 1 | 0 | Race condition vận đơn GHN và bù trừ kho Pha 3 |
 | 21 | `synthetic-integration.test.js` | 1 | 1 | 0 | Tích hợp SQL thực tế bảo vệ sản phẩm synthetic |
-| **Tổng** | **21 file test** | **110** | **108** | **2** | **Tỷ lệ thành công: 100% (0 bài fail)** |
+| **Tổng** | **21 file test** | **112** | **110** | **2** | **Tỷ lệ thành công: 100% (0 bài fail)** |
 
 * **Kiểm thử Đơn vị Frontend (`npm.cmd --prefix core-frontend test`):**
   * Chạy trên `labels.test.js`, `CartBadge.test.js`, `encoding.test.js`.
   * Kết quả: **24/24 passed (100%)**. Mã hóa UTF-8 toàn dự án không chứa lỗi U+FFFD hoặc chuỗi hỏng.
 * **Kiểm thử E2E Giao diện với Playwright (`npx playwright test e2e/storefront.spec.js`):**
   * Thời gian chạy: 1.1 phút trên Microsoft Edge headless.
-  * Kết quả: **10/10 passed (100%)**. Đã cập nhật test 10 xác minh Quyết định A: Khách xem được sản phẩm demo trên catalog với nhãn không đặt mua bị vô hiệu hóa, tài khoản demo xem được chi tiết.
+  * Kết quả: **10/10 passed (100%)**. Đã kiểm thử trọn vẹn: Khách xem được 1.000 sản phẩm demo trên catalog, mở trang chi tiết ở chế độ chỉ xem, nút "Không đặt mua" bị vô hiệu hóa, và request `POST /api/cart/items` bị backend từ chối 400.
 * **Kiểm thử Parity Serving ML (`docker exec -e PYTHONPATH=/app gift_ml_service python /app/tests/test_serving_parity.py`):**
   * Kiểm tra 50 người dùng ngẫu nhiên từ tập validation (tổng cộng 4.997 cặp ứng viên).
   * Độ sai lệch điểm số lớn nhất giữa phục vụ API và đánh giá offline: **5.00e-07** (nhỏ hơn ngưỡng 1e-6).
@@ -208,15 +218,15 @@ Chiến dịch **GIFTLY-FINAL** được thực thi với các nguyên tắc an 
 | :--- | :---: | :---: | :---: |
 | **Độ trễ suy luận ML Ranker trực tiếp** | **11.86 ms** | < 50 ms | Đạt tiêu chí thời gian thực của mô hình |
 | **Độ trễ gợi ý Web E2E (P50)** | **54.29 ms** | < 1.500 ms | Vượt mục tiêu (nhanh gấp ~27 lần) |
-| **Độ trễ gợi ý Web E2E (P95)** | **65.70 ms** | < 1.500 ms | Rất xuất sắc |
+| **Độ trễ gợi ý Web E2E (P95)** | **65.70 ms** | < 1.500 ms | Rất tốt |
 | **Sai số Train/Serve Parity (Max Diff)** | **5.00e-07** | < 1.00e-06 | Khớp tuyệt đối, không có Train/Serve skew |
 | **Số lượng sản phẩm trong Catalog** | **1.014 món** (1.000 demo REES46 + 14 seed cơ sở) | 1.000 demo | Đạt 100% |
 | **Số sản phẩm tồn kho âm (`stock < 0`)** | **0** | 0 | An toàn tuyệt đối |
 | **Số lượng đơn hàng mô phỏng** | **2.000 đơn** | 2.000 đơn | Đầy đủ lịch sử trạng thái & biến động kho |
 | **Số sự kiện tương tác trong DB** | **23.013 events** (22.926 mô phỏng + 87 baseline) | 20.000 events | Đạt 100% gắn cờ phân định rõ ràng |
-| **Tỷ lệ Pass bài kiểm thử Backend** | **108/110 (100% các bài kích hoạt)** | 100% | Bổ sung test kiểm chứng đơn mô phỏng |
+| **Tỷ lệ Pass bài kiểm thử Backend** | **110/112 (100% các bài kích hoạt)** | 100% | Đầy đủ test hợp đồng, bảo vệ synthetic và kiểm chứng đơn sim |
 | **Tỷ lệ Pass bài kiểm thử Frontend Unit** | **24/24 (100%)** | 100% | Toàn vẹn UTF-8 và nhãn nghiệp vụ |
-| **Tỷ lệ Pass bài kiểm thử Playwright E2E** | **10/10 (100%)** | 100% | Khách xem được 1.000 sản phẩm demo REES46 |
+| **Tỷ lệ Pass bài kiểm thử Playwright E2E** | **10/10 (100%)** | 100% | Khách xem demo 1.000 sản phẩm chỉ xem; chặn thêm giỏ hàng |
 
 ---
 
@@ -227,11 +237,15 @@ Mọi bản sao lưu cơ sở dữ liệu đã được lưu trữ an toàn tạ
   1. `dump_gift_ecommerce_baseline.sql` (288 KB) — Trạng thái ban đầu trước khi bắt đầu chiến dịch.
   2. `dump_gift_ecommerce_before_1000.sql` (288 KB) — Trạng thái trước khi nhập 1.000 sản phẩm.
   3. `dump_gift_ecommerce_before_sim.sql` (1.095 KB) — Trạng thái trước khi sinh giao dịch mô phỏng.
-  4. `dump_gift_ecommerce_final.sql` (8.716 KB) — Trạng thái hoàn thiện toàn diện sau khi hoàn tất 1.000 sản phẩm và toàn bộ dữ liệu mô phỏng.
+  4. `dump_gift_ecommerce_final.sql` (8.716 KB) — Trạng thái sau khi hoàn tất 1.000 sản phẩm và toàn bộ dữ liệu mô phỏng.
   5. `dump_before_cat_desc_update.sql` (8.716 KB) — Trạng thái trước khi cập nhật mô tả danh mục sang nhãn trung tính.
 
 ---
 
-## V. KẾT LUẬN VÀ BÀN GIAO
+## V. KẾT LUẬN VÀ TRẠNG THÁI NGHIỆM THU
 
-Chiến dịch **GIFTLY-FINAL** đã hoàn thành trọn vẹn và chuẩn xác theo mọi quyết định đã chốt. Toàn bộ nền tảng thương mại điện tử và hệ thống gợi ý quà tặng Giftly hiện đang vận hành ổn định, đồng bộ từ giao diện người dùng, backend API, cơ sở dữ liệu MySQL đến microservice học máy FastAPI. Hệ thống minh bạch ranh giới giữa mô hình học máy LC-1 và quy tắc lọc metadata cơ sở, bảo vệ toàn vẹn dữ liệu và đảm bảo trải nghiệm khách hàng tối ưu.
+Chiến dịch **GIFTLY-FINAL** đã hoàn thành các mục tiêu kỹ thuật theo đúng các quyết định đã chốt và các ràng buộc an toàn đã đề ra:
+- Khách xem được 1.000 sản phẩm demo REES46 trên catalog công khai và xem chi tiết sản phẩm ở chế độ chỉ xem với banner thông báo rõ ràng; nút "Không đặt mua" bị vô hiệu hóa; API giỏ hàng chặn thêm vào giỏ.
+- Dữ liệu mô phỏng gồm 2.000 đơn hàng và 22.926 sự kiện tương tác được phân lập chặt chẽ bằng cờ `is_simulated = 1`, không gây sai lệch luồng tính toán tín hiệu người dùng thật.
+- Kiểm chứng thực nghiệm khẳng định rõ ràng: Mô hình Ranker LC-1 đọc đặc trưng tĩnh đóng băng từ snapshot offline tại mốc cutoff 2020-01-15 nên cả đơn mô phỏng lẫn đơn thật trong MySQL đều không làm thay đổi thứ tự xếp hạng của mô hình. Tầng backend Giftly đã có đối chứng âm (loại bỏ đơn mô phỏng) và đối chứng dương (kích hoạt `personalized_activity` khi có tương tác thật).
+- Hệ thống kiểm thử toàn diện đã được xác minh trên cơ sở dữ liệu cách ly `giftly_e2e_test` với kết quả: Backend 110/112 passed (2 skipped có lý do bảo vệ môi trường), Frontend Unit 24/24 passed, Playwright E2E 10/10 passed.

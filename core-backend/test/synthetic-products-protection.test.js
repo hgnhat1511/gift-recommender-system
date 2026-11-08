@@ -158,18 +158,22 @@ describe('BƯỚC 1: Chặn sản phẩm synthetic khỏi storefront, giỏ hàn
         });
     });
 
-    describe('3. Chi tiết sản phẩm (catalogController.detail): Chặn khách thường xem chi tiết sản phẩm synthetic', () => {
+    describe('3. Chi tiết sản phẩm (catalogController.detail) và giỏ hàng: Khách xem chi tiết chế độ chỉ xem, chặn thêm giỏ', () => {
         const catalogController = require('../controllers/catalogController');
+        const cartController = require('../controllers/cartController');
 
-        test('Khách thường hoặc khách vãng lai gọi GET /products/:id sản phẩm synthetic -> trả 404', async () => {
+        test('Khách thường hoặc khách vãng lai gọi GET /products/:id sản phẩm synthetic -> cho phép xem chi tiết ở chế độ chỉ xem (200 OK, isSyntheticDisplay = true)', async () => {
             const origExec = pool.execute;
             pool.execute = async (sql, params) => {
-                if (sql.includes('SELECT p.*,c.name category_name')) {
+                if (sql.includes('SELECT p.*,c.name category_name') && !sql.includes('category_id <=>')) {
                     return [[{
                         id: 201, name: 'REES Product', category_id: 99, status: 'ACTIVE',
-                        is_synthetic_display: 1
+                        is_synthetic_display: 1, occasion_tags: '[]', recipient_tags: '[]', interest_tags: '[]'
                     }]];
                 }
+                if (sql.includes('product_events')) return [[]];
+                if (sql.includes('product_images')) return [[]];
+                if (sql.includes('category_id <=>')) return [[]]; // related products
                 return [[]];
             };
 
@@ -177,9 +181,10 @@ describe('BƯỚC 1: Chặn sản phẩm synthetic khỏi storefront, giỏ hàn
                 const req = { params: { id: '201' }, user: null }; // Khách vãng lai
                 const res = createMockRes();
                 await catalogController.detail(req, res, () => {});
-                assert.equal(res.statusCode, 404);
-                assert.equal(res.body.success, false);
-                assert.equal(res.body.message, 'Product not found.');
+                assert.equal(res.statusCode, null); // 200 JSON
+                assert.equal(res.body.success, true);
+                assert.equal(res.body.data.product.id, '201');
+                assert.equal(res.body.data.product.isSyntheticDisplay, true);
             } finally {
                 pool.execute = origExec;
             }
@@ -210,6 +215,34 @@ describe('BƯỚC 1: Chặn sản phẩm synthetic khỏi storefront, giỏ hàn
                 assert.equal(res.body.data.product.isSyntheticDisplay, true);
             } finally {
                 pool.execute = origExec;
+            }
+        });
+
+        test('Cố tình gọi POST /cart/items với sản phẩm synthetic -> bị chặn 400', async () => {
+            const mockConn = {
+                beginTransaction: async () => {},
+                rollback: async () => {},
+                commit: async () => {},
+                release: () => {},
+                execute: async (sql, params) => {
+                    if (sql.includes('FROM products WHERE id=?')) {
+                        return [[{ id: 201, name: 'REES Product', stock: 10, is_synthetic_display: 1 }]];
+                    }
+                    return [[]];
+                }
+            };
+            const origGetConnection = pool.getConnection;
+            pool.getConnection = async () => mockConn;
+
+            try {
+                const req = { user: { id: 10 }, body: { productId: 201, quantity: 1 } };
+                const res = createMockRes();
+                await cartController.add(req, res, () => {});
+                assert.equal(res.statusCode, 400);
+                assert.equal(res.body.success, false);
+                assert.match(res.body.message, /mẫu thử nghiệm/);
+            } finally {
+                pool.getConnection = origGetConnection;
             }
         });
     });

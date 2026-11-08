@@ -721,11 +721,27 @@ test('quyết định A: khách xem được sản phẩm demo trên catalog v�
       await conn.end();
     }
 
-    // 4. Khách thường gọi API chi tiết /api/products/:id của sản phẩm synthetic -> bị 404
+    // 4. Khách vãng lai gọi API chi tiết /api/products/:id của sản phẩm synthetic -> trả về 200 OK (chế độ chỉ xem)
     const guestDetailRes = await api.get(`/api/products/${syntheticId}`);
-    expect(guestDetailRes.status()).toBe(404);
+    expect(guestDetailRes.ok()).toBeTruthy();
+    const guestDetailData = (await guestDetailRes.json()).data;
+    expect(guestDetailData.product.isSyntheticDisplay).toBe(true);
 
-    // 5. Đăng nhập bằng tài khoản demo (đã được tạo bởi globalSetup: email demo-ml@giftly.test)
+    // 5. Khách duyệt trang chi tiết sản phẩm synthetic trực tiếp trên trình duyệt
+    await page.goto(`/products/${syntheticId}`);
+
+    // Xác minh: Thấy badge "Sản phẩm demo, không đặt mua"
+    const demoBadge = page.locator('.commerce-badge-synthetic');
+    await expect(demoBadge).toBeVisible();
+    await expect(demoBadge).toContainText('Sản phẩm demo, không đặt mua');
+
+    // Xác minh: Nút đặt mua bị vô hiệu hóa (disabled) và hiển thị "Không đặt mua"
+    const purchaseButton = page.locator('.commerce-detail-actions button.commerce-button');
+    await expect(purchaseButton).toBeVisible();
+    await expect(purchaseButton).toBeDisabled();
+    await expect(purchaseButton).toContainText('Không đặt mua');
+
+    // 6. Đăng nhập tài khoản và thử gửi POST /api/cart/items thêm sản phẩm synthetic -> bị chặn 400
     const demoLogin = await api.post('/api/auth/login', {
       data: { email: 'demo-ml@giftly.test', password: 'Demo-User-ML-2026!' },
     });
@@ -733,27 +749,14 @@ test('quyết định A: khách xem được sản phẩm demo trên catalog v�
     const demoSession = (await demoLogin.json()).data;
     expect(demoSession.user.email).toBe('demo-ml@giftly.test');
 
-    // Xác minh tài khoản demo có thể truy cập thành công API chi tiết sản phẩm synthetic (200 OK)
-    const demoDetailRes = await api.get(`/api/products/${syntheticId}`, {
+    const addCartRes = await api.post('/api/cart/items', {
       headers: { authorization: `Bearer ${demoSession.token}` },
+      data: { productId: Number(syntheticId), quantity: 1 },
     });
-    expect(demoDetailRes.ok()).toBeTruthy();
-    const detailData = (await demoDetailRes.json()).data;
-    expect(detailData.product.isSyntheticDisplay).toBe(true);
-
-    // 6. Mở trang chi tiết sản phẩm synthetic với session tài khoản demo trên trình duyệt
-    await openAuthenticatedPage(page, demoSession, `/products/${syntheticId}`);
-
-    // 7. Xác minh: Thấy badge "Sản phẩm demo, không đặt mua"
-    const demoBadge = page.locator('.commerce-badge-synthetic');
-    await expect(demoBadge).toBeVisible();
-    await expect(demoBadge).toContainText('Sản phẩm demo, không đặt mua');
-
-    // 8. Xác minh: Nút đặt mua bị vô hiệu hóa (disabled) và ghi rõ nhãn demo
-    const purchaseButton = page.locator('.commerce-detail-actions button.commerce-button');
-    await expect(purchaseButton).toBeVisible();
-    await expect(purchaseButton).toBeDisabled();
-    await expect(purchaseButton).toContainText('Sản phẩm demo, không đặt mua');
+    expect(addCartRes.status()).toBe(400);
+    const addCartBody = await addCartRes.json();
+    expect(addCartBody.success).toBe(false);
+    expect(addCartBody.message).toContain('mẫu thử nghiệm');
   } finally {
     await api.dispose();
   }

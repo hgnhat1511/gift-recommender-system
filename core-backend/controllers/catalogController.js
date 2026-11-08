@@ -128,16 +128,6 @@ async function detail(req, res, next) {
             LEFT JOIN (SELECT product_id,AVG(rating) average_rating,COUNT(*) review_count FROM reviews WHERE is_approved=1 GROUP BY product_id) rv ON rv.product_id=p.id
             WHERE p.id=? AND p.status='ACTIVE' LIMIT 1`, [req.params.id]);
         if (!rows[0]) return res.status(404).json({ success: false, message: 'Product not found.' });
-        if (rows[0].is_synthetic_display) {
-            let isDemoUser = Boolean(req.user?.ml_user_id);
-            if (!isDemoUser && req.user?.id) {
-                const [[userCheck]] = await pool.execute('SELECT ml_user_id FROM users WHERE id=? LIMIT 1', [req.user.id]);
-                isDemoUser = Boolean(userCheck?.ml_user_id);
-            }
-            if (!isDemoUser) {
-                return res.status(404).json({ success: false, message: 'Product not found.' });
-            }
-        }
         const isSimulated = Boolean(req.body?.isSimulated || req.headers?.['x-simulated'] === 'true');
         await pool.execute("INSERT INTO product_events (user_id,product_id,event_type,is_simulated) VALUES (?,?,'VIEW',?)", [req.user?.id || null, req.params.id, isSimulated ? 1 : 0]);
         const [images] = await pool.execute('SELECT image_url,alt_text FROM product_images WHERE product_id=? ORDER BY sort_order,id', [req.params.id]);
