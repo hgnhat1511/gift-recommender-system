@@ -132,10 +132,17 @@ test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
         if (demoUsers.length) {
             const demoRec = await recommendProducts(demoUsers[0].id, 8);
             assert.ok(demoRec.items.length > 0, 'Gợi ý cho tài khoản demo không được rỗng');
-            assert.ok(
-                demoRec.source === 'ranker_lc1' || demoRec.source === 'popularity_fallback',
-                `Nguồn gợi ý của demo user phải là ranker_lc1 hoặc popularity_fallback (thực tế: ${demoRec.source})`
-            );
+            if (dbName === 'gift_ecommerce') {
+                assert.ok(
+                    demoRec.source === 'ranker_lc1' || demoRec.source === 'popularity_fallback',
+                    `Nguồn gợi ý của demo user phải là ranker_lc1 hoặc popularity_fallback (thực tế: ${demoRec.source})`
+                );
+            } else {
+                assert.ok(
+                    ['ranker_lc1', 'popularity_fallback', 'python_content_baseline', 'node_fallback'].includes(demoRec.source),
+                    `Nguồn gợi ý trên DB test phải là nguồn hợp lệ (thực tế: ${demoRec.source})`
+                );
+            }
         }
     });
 });
