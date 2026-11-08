@@ -1,0 +1,109 @@
+{
+  "version": "rule_v1",
+  "source": "rule_v1",
+  "description": "Bảng luật gán thẻ quà tặng bán tự động cho 1.000 sản phẩm demo REES46 theo ủy quyền của người dùng. Đây là luật suy diễn quy tắc (Rule-based), không phải nhãn sự thật (ground truth). Mô hình Ranker LC-1 không sử dụng các thẻ này.",
+  "budget_tiers": {
+    "level_1": {
+      "min": 0,
+      "max": 93000,
+      "tag": "budget_under_93k",
+      "description": "Dưới 93.000 VND"
+    },
+    "level_2": {
+      "min": 93000,
+      "max": 125000,
+      "tag": "budget_93k_125k",
+      "description": "Từ 93.000 đến dưới 125.000 VND"
+    },
+    "level_3": {
+      "min": 125000,
+      "max": 186000,
+      "tag": "budget_125k_186k",
+      "description": "Từ 125.000 đến dưới 186.000 VND"
+    },
+    "level_4": {
+      "min": 186000,
+      "max": null,
+      "tag": "budget_over_186k",
+      "description": "Từ 186.000 VND trở lên"
+    }
+  },
+  "recipient_mappings": {
+    "bạn gái": "partner",
+    "bạn trai": "partner",
+    "mẹ": "mother",
+    "ba": "father",
+    "đồng nghiệp": "colleague",
+    "bạn bè": "friend",
+    "trẻ em": "child"
+  },
+  "occasion_mappings": {
+    "cảm ơn": "thank-you",
+    "lễ tết": "tet",
+    "sinh nhật": "birthday",
+    "kỷ niệm": "anniversary"
+  },
+  "category_code_recipient_rules": {
+    "accessories": [
+      "partner",
+      "mother"
+    ],
+    "apparel": [
+      "partner"
+    ],
+    "appliances": [
+      "father",
+      "mother"
+    ],
+    "furniture": [
+      "father",
+      "mother"
+    ],
+    "stationery": [
+      "colleague",
+      "friend"
+    ],
+    "sport": [
+      "partner",
+      "father"
+    ],
+    "kids": [
+      "child"
+    ]
+  },
+  "fallback_recipient_by_budget": {
+    "level_1": [
+      "friend",
+      "colleague"
+    ],
+    "level_2": [
+      "partner",
+      "mother"
+    ],
+    "level_3": [
+      "partner",
+      "mother"
+    ],
+    "level_4": [
+      "partner",
+      "mother"
+    ]
+  },
+  "occasion_by_budget": {
+    "level_1": [
+      "thank-you",
+      "tet"
+    ],
+    "level_2": [
+      "birthday",
+      "thank-you"
+    ],
+    "level_3": [
+      "birthday",
+      "anniversary"
+    ],
+    "level_4": [
+      "anniversary"
+    ]
+  }
+}
