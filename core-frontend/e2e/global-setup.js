@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import path from 'node:path';
 import process from 'node:process';
 
 const require = createRequire(import.meta.url);
@@ -31,7 +30,7 @@ export default async function globalSetup() {
         category_id, name, description, price, stock, image_url, status,
         is_synthetic_display, ml_product_id, occasion_tags, recipient_tags, interest_tags
       ) VALUES (
-        ?, 'Sản phẩm REES46 Demo Synthetic',
+        ?, 'Sản phẩm Demo Synthetic Lifestyle',
         'Mô tả sản phẩm demo synthetic phục vụ kiểm thử hệ thống gợi ý.',
         199000, 10, 'https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&w=800&q=85',
         'ACTIVE', TRUE, 999999, '["birthday"]', '["friend"]', '["decor"]'

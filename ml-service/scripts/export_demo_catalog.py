@@ -90,7 +90,7 @@ def main():
             "price": vnd_price,
             "stock": 50,
             "image_url": img,
-            "category_name": "Quà tặng REES46",
+            "category_name": "Lifestyle",
             "is_synthetic_display": True,
             "style": "modern",
             "gift_type": "lifestyle",

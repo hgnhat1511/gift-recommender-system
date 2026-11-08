@@ -197,6 +197,7 @@ async function recommendProducts(userId, limit) {
             JOIN products p ON p.id = e.product_id
             LEFT JOIN categories c ON c.id = p.category_id
             WHERE e.user_id = ?
+                AND (e.is_simulated = 0 OR e.is_simulated IS NULL)
                 AND e.event_type IN ('VIEW', 'CART_ADD', 'PURCHASE', 'RECOMMENDATION_CLICK')
                 AND e.created_at >= DATE_SUB(NOW(), INTERVAL 180 DAY)
             ORDER BY e.created_at DESC, e.id DESC
@@ -252,12 +253,13 @@ async function recommendProducts(userId, limit) {
             SELECT product_id, COUNT(*) AS event_count
             FROM product_events
             WHERE event_type IN ('VIEW', 'CART_ADD', 'PURCHASE')
+                AND (is_simulated = 0 OR is_simulated IS NULL)
                 AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
             GROUP BY product_id
         ) pop ON pop.product_id = p.id
         WHERE p.status = 'ACTIVE' AND p.stock > 0 ${syntheticFilter} ${exclusion}
         ORDER BY p.is_featured DESC, p.created_at DESC, p.id DESC
-        LIMIT 500`, params);
+        LIMIT 2000`, params);
 
     const maxOf = (map) => Math.max(0, ...[...map.values()].map((item) => item.weight));
     const maxima = {

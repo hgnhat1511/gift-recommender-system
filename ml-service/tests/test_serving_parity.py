@@ -9,7 +9,13 @@ Không yêu cầu cài thêm thư viện bên ngoài (dùng trực tiếp endpoi
 import pickle
 import numpy as np
 import pandas as pd
-import pytest
+try:
+    import pytest
+    fixture = pytest.fixture
+except ImportError:
+    def fixture(*args, **kwargs):
+        def dec(f): return f
+        return dec
 
 from main import app, health, recommend_rank, RankRequest, init_service
 from ml_pipeline.ranker import FEATURE_COLUMNS
@@ -17,7 +23,7 @@ from ml_pipeline.ranker import FEATURE_COLUMNS
 EXPECTED_SHA256 = "1d11488782894eae3b4eb142943303f4c9e85d0784f800047396d4f444eea8ff"
 
 
-@pytest.fixture(scope="module", autouse=True)
+@fixture(scope="module", autouse=True)
 def setup_service():
     """
     Khởi tạo ranker_service trước khi chạy tests.
@@ -145,3 +151,18 @@ def test_validation_parity_50_users():
     print(f"\n[PARITY AUDIT] Checked 50 users, total {total_pairs_checked} candidate pairs.")
     print(f"[PARITY AUDIT] Max absolute score difference: {max_diff:.2e}")
     assert max_diff < 1e-6, f"Difference {max_diff} exceeds 1e-6 threshold!"
+
+
+if __name__ == "__main__":
+    init_service()
+    print("Testing test_health_endpoint...")
+    test_health_endpoint()
+    print("Testing test_cold_user_fallback...")
+    test_cold_user_fallback()
+    print("Testing test_unknown_candidates_returns_unknown_source...")
+    test_unknown_candidates_returns_unknown_source()
+    print("Testing test_cold_user_with_known_candidates_sorts_by_pop...")
+    test_cold_user_with_known_candidates_sorts_by_pop()
+    print("Testing test_validation_parity_50_users...")
+    test_validation_parity_50_users()
+    print("\n>>> ALL 5 SERVING PARITY TESTS PASSED! <<<")

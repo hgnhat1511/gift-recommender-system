@@ -97,7 +97,7 @@ const defaultFestiveSlides = [
     id: 'default-2',
     tag: 'SINH NHẬT & KỶ NIỆM',
     title: 'Món Quà Sinh Nhật · Chạm Đến Trái Tim',
-    subtitle: 'Gợi ý quà tặng chuẩn gu theo sở thích, độ tuổi và ngân sách với tính năng Gợi ý quà tặng thông minh.',
+    subtitle: 'Tìm quà theo dịp tặng, sở thích người nhận và ngân sách với công cụ Gift Finder.',
     buttonText: 'Xem quà sinh nhật',
     targetUrl: '/products?occasion=birthday',
     secondaryButtonText: 'Dùng Gợi ý quà tặng',
@@ -514,6 +514,11 @@ function App() {
             )}
           </section>
 
+          {/* Banner thông báo dữ liệu mẫu */}
+          <div className="commerce-demo-banner" role="note">
+            Dữ liệu mẫu từ bộ REES46, dùng cho demo.
+          </div>
+
           {/* Quick Categories Bar (Dẫn tới các danh mục và trang thật) */}
           <div className="quick-category-row" aria-label="Danh mục nổi bật">
             <Link to="/products?occasion=birthday" className="quick-cat-item">
@@ -552,6 +557,15 @@ function App() {
                   <p>{recommendations.method === 'personalized_activity'
                     ? 'Phân tích lượt xem, sở thích và tương tác gần đây của bạn.'
                     : 'Tuyển chọn những món quà ý nghĩa nhất được ưa chuộng.'}</p>
+                  <p className="recommendation-method-note">
+                    {recommendations.source === 'ranker_lc1'
+                      ? 'Xếp hạng bằng LightGBM LC-1 trên hồ sơ demo REES46 đã ánh xạ; mô hình chưa được đánh giá trên dữ liệu Giftly.'
+                      : recommendations.source === 'python_content_baseline'
+                        ? 'Xếp hạng baseline theo nội dung và thuộc tính sản phẩm Giftly.'
+                        : recommendations.source === 'popularity_fallback'
+                          ? 'Dùng popularity fallback từ dữ liệu REES46 vì hồ sơ chưa đủ lịch sử cho LC-1.'
+                          : 'Dùng baseline theo tương tác và thuộc tính catalog Giftly; đây không phải mô hình học máy.'}
+                  </p>
                 </div>
                 <Link to="/products" className="text-link">Xem tất cả <ArrowRight size={17} /></Link>
               </div>

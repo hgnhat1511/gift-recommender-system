@@ -79,6 +79,14 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
                     const [c] = await dbConn.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='products' AND COLUMN_NAME='is_synthetic_display'");
                     if (c.length) continue;
                 }
+                if (/^ALTER\s+TABLE\s+`?orders`?\s+ADD\s+COLUMN\s+`?is_simulated`?/i.test(statement)) {
+                    const [c] = await dbConn.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='orders' AND COLUMN_NAME='is_simulated'");
+                    if (c.length) continue;
+                }
+                if (/^ALTER\s+TABLE\s+`?product_events`?\s+ADD\s+COLUMN\s+`?is_simulated`?/i.test(statement)) {
+                    const [c] = await dbConn.execute("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='product_events' AND COLUMN_NAME='is_simulated'");
+                    if (c.length) continue;
+                }
 
                 await dbConn.query(statement);
             }

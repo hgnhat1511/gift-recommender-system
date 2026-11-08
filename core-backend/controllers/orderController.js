@@ -121,10 +121,11 @@ async function create(req, res, next) {
         const orderCode = `GL${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         const address = totals.address;
         const initialStatus = paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING';
+        const isSimulated = Boolean(req.body?.isSimulated || req.headers?.['x-simulated'] === 'true');
         const [created] = await connection.execute(`INSERT INTO orders
-            (order_code,idempotency_key,user_id,status,payment_method,shipping_method,payment_status,recipient_name,phone,shipping_address,customer_note,coupon_code,subtotal,discount_amount,shipping_fee,total_amount)
-            VALUES (?,?,?,?,?,?, 'UNPAID',?,?,?,?,?,?,?,?,?)`,
-            [orderCode,requestKey,req.user.id,initialStatus,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents)]);
+            (order_code,idempotency_key,user_id,status,payment_method,shipping_method,payment_status,recipient_name,phone,shipping_address,customer_note,coupon_code,subtotal,discount_amount,shipping_fee,total_amount,is_simulated)
+            VALUES (?,?,?,?,?,?, 'UNPAID',?,?,?,?,?,?,?,?,?,?)`,
+            [orderCode,requestKey,req.user.id,initialStatus,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents), isSimulated ? 1 : 0]);
         const orderId = created.insertId;
         await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,initialStatus,'Khách đặt hàng']);
         const sortedItems = [...totals.items].sort((a, b) => Number(a.product_id) - Number(b.product_id));
@@ -154,7 +155,7 @@ async function create(req, res, next) {
             await connection.execute('INSERT INTO order_items (order_id,product_id,product_name,image_url,unit_price,quantity,line_total) VALUES (?,?,?,?,?,?,?)',
                 [orderId,item.product_id,item.name,item.image_url,Number(item.price),item.quantity,amount(cents(item.price)*Number(item.quantity))]);
             await connection.execute('INSERT INTO inventory_movements (product_id,changed_by,quantity_delta,reason,order_id) VALUES (?,?,?,\'Đơn hàng của khách\',?)', [item.product_id,req.user.id,-Number(item.quantity),orderId]);
-            await connection.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'PURCHASE')", [req.user.id,item.product_id]);
+            await connection.execute("INSERT INTO product_events (user_id,product_id,event_type,is_simulated) VALUES (?,?,'PURCHASE',?)", [req.user.id,item.product_id, isSimulated ? 1 : 0]);
         }
         if (totals.coupon) {
             await connection.execute('UPDATE coupons SET used_count=used_count+1 WHERE id=?', [totals.coupon.id]);

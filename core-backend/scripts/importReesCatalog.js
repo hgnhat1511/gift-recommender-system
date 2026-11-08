@@ -51,19 +51,19 @@ async function importReesCatalog() {
         // 3. Đảm bảo danh mục tồn tại
         const [catRows] = await connection.execute(
             'SELECT id FROM categories WHERE name = ? LIMIT 1',
-            ['Quà tặng REES46']
+            ['Lifestyle']
         );
         let categoryId = catRows.length ? catRows[0].id : null;
         if (!categoryId) {
             if (isApply) {
                 const [createdCat] = await connection.execute(
                     'INSERT INTO categories (name, description, is_active, sort_order) VALUES (?, ?, TRUE, 99)',
-                    ['Quà tặng REES46', 'Danh mục sản phẩm mở rộng từ tập dữ liệu REES46 dùng cho mô hình gợi ý LC-1']
+                    ['Lifestyle', 'Danh mục sản phẩm mở rộng phong cách sống và tiện ích quà tặng']
                 );
                 categoryId = createdCat.insertId;
-                console.log(`[APPLY] Đã tạo danh mục 'Quà tặng REES46' (id: ${categoryId}).`);
+                console.log(`[APPLY] Đã tạo danh mục 'Lifestyle' (id: ${categoryId}).`);
             } else {
-                console.log(`[DRY-RUN] Sẽ tạo danh mục 'Quà tặng REES46'.`);
+                console.log(`[DRY-RUN] Sẽ tạo danh mục 'Lifestyle'.`);
                 categoryId = 999;
             }
         }

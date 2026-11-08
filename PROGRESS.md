@@ -1,4 +1,10 @@
-# Giftly — Tiến độ mở rộng
+# Giftly — Tiến độ đồ án đề xuất sản phẩm bằng học máy
+
+> **Định hướng chính:** đề tài là hệ thống đề xuất sản phẩm học máy trong ngách quà tặng. Các chức năng thương mại điện tử hỗ trợ catalog, ghi nhận hành vi và trình diễn sản phẩm; không thay thế phần nghiên cứu recommender.
+>
+> **Trạng thái cập nhật 2026-11-07:** LC-1 (LightGBM) đã được huấn luyện/đánh giá offline trên REES46 eCommerce tổng quát và đã có API serving. Đây là bằng chứng cho pipeline ranking trên dữ liệu REES46, chưa phải đánh giá trên dữ liệu quà tặng Giftly. LC-1 chỉ được ánh xạ cho tài khoản demo; Gift Finder dùng lọc metadata quà tặng kết hợp Python content baseline hoặc Node rule fallback. Dữ liệu tương tác Giftly chưa được dùng để train/retrain mô hình.
+>
+> Bảng và nhật ký phía dưới có các ghi chép lịch sử theo thời điểm; khi có khác biệt, dùng trạng thái cập nhật này và `PROGRESS_ML.md` làm nguồn hiện trạng.
 
 > **Lưu ý bảo mật:** Trước lần push đầu tiên phải quét bí mật (.env.example, e2e, playwright.config.js, URL chứa credential, chuỗi hex/base64 dài).
 
@@ -55,8 +61,8 @@ Cập nhật: 2026-10-25 (Triển khai Giai đoạn 2 - Giỏ hàng và tồn kh
 | Đơn hàng | Chưa có | Tìm/lọc, chi tiết theo chủ, mua lại có kiểm tồn, lịch sử vận chuyển/đổi trả, hủy PENDING, state machine admin |
 | Admin | Chưa có | Dashboard có lọc ngày và hiệu suất danh mục; sản phẩm/danh mục/banner, coupon theo danh mục, đơn lọc ngày/trạng thái/thanh toán, khách/role, tồn kho ledger/adjustment, return, review moderation |
 | Profile | Chưa có | Thông tin liên hệ, mật khẩu, địa chỉ, yêu thích, thông báo và yêu cầu xóa có xác thực/queue admin |
-| Gift Finder | Nút placeholder | Content matching từ tags catalog, budget, lời giải thích khớp; ghi sự kiện tìm và click |
-| AI Python | Baseline rỗng | Ranker LC-1 (LightGBM) đã huấn luyện, đóng băng (SHA-256: 1d114887...), đạt Validation NDCG@10 = 0.085476 (+37,04% so với baseline 0.062373); kết quả kiểm thử chính thức: test_1 NDCG@10 = 0.071261 (+27,77%), test_2 NDCG@10 = 0.070601 (+32,79%). Phục vụ online qua FastAPI POST /recommend/rank trong Docker container gift_ml_service (chi tiết xem PROGRESS_ML.md) |
+| Gift Finder | Nút placeholder | Lọc ứng viên theo metadata quà tặng, ngân sách; Python content baseline / Node rule fallback có giải thích; chưa dùng LC-1 |
+| Hệ thống đề xuất học máy | Baseline rỗng | LC-1 LightGBM đã train/evaluate trên REES46 eCommerce tổng quát và có serving; chưa đánh giá/retrain trên dữ liệu quà tặng Giftly, mapping demo giới hạn (chi tiết xem PROGRESS_ML.md) |
 | Redis | Health check | Dùng health check; chưa cache nghiệp vụ |
 | Thanh toán/vận chuyển/email | Chưa tích hợp | COD; admin lưu hãng/mã vận đơn/lịch sử nội bộ, khách xem trong app và nhận thông báo; chưa có API hãng hoặc email reset |
 
@@ -98,7 +104,7 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 6. Thu thập dữ liệu tương tác có đồng ý, triển khai service Python/model, đánh giá trên dữ liệu thật rồi mới mô tả gợi ý là ML.
 7. Cân nhắc giỏ khách vãng lai, hoàn thiện quy trình xóa/ẩn danh theo chính sách lưu trữ, lịch sử tìm kiếm và tùy chọn thông báo.
 8. Có thể bổ sung tạo PDF riêng phía server, biến thể sản phẩm và upload ảnh an toàn.
-9. Bổ sung CMS cho nội dung tĩnh và chỉ số vận hành AI sau khi có model Python; hiện chưa có model hoặc dashboard mô hình.
+9. Bổ sung CMS cho nội dung tĩnh và dashboard theo dõi chất lượng/phiên bản mô hình sau khi hoàn thành đánh giá trên dữ liệu quà tặng Giftly. LC-1 hiện đã có, nhưng chưa có model-ops dashboard và chưa có đánh giá trên miền dữ liệu Giftly.
 
 
 ## 2026-10-10 - Activity based recommendations

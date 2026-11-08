@@ -85,3 +85,31 @@ Nhằm đảm bảo 188 sản phẩm demo REES46 không làm sai lệch hoạt �
    Trong file `docker-compose.yml`, hiện tại mới chỉ có các dịch vụ cơ sở hạ tầng và ML chạy trong container:
    - Container đang chạy: `gift_mysql` (MySQL 8), `gift_redis` (Redis 7), `gift_ml_service` (FastAPI ML Service).
    - Service chạy cục bộ máy host: `core-backend` (Node.js Express) và `core-frontend` (Vite React). Chưa container hóa toàn bộ ứng dụng thành 1 lệnh duy nhất.
+
+---
+
+## 6. Thực nghiệm huấn luyện lại từ `archive` (2026-11-07)
+
+Đã bổ sung pipeline tái lập từ các CSV REES46 trong thư mục `D:\NAM4\DACN\archive`. Notebook `notebooks/lab1_xu_ly_du_lieu_f1.ipynb` được giữ nguyên làm bài minh họa thống kê/F1 với dữ liệu sinh ngẫu nhiên; notebook đó không phải pipeline huấn luyện recommender.
+
+### Tiền xử lý
+
+- `scripts/prepare_archive_events.py` đọc tuần tự 5 CSV theo chunk 500.000 dòng; không nạp toàn bộ 2,4 GB vào RAM và không sửa file nguồn.
+- Lấy mẫu xác định theo `user_id` bằng MD5 với tỷ lệ 10%, seed 42; giữ các event `view`, `cart`, `remove_from_cart`, `purchase`; loại giá không dương.
+- Run hiện tại: đọc 20.692.840 dòng, ghi 1.979.595 sự kiện, 164.111 người dùng, 45.550 sản phẩm; khoảng thời gian 2019-10-01 đến 2020-02-29.
+- Dữ liệu Parquet, feature datasets, metrics JSON và model artifact được giữ dưới `ml-service/data/experiments/` và `ml-service/models/experiments/`; các đường dẫn này đã được thêm vào `.gitignore`.
+
+### Huấn luyện và đánh giá
+
+- `scripts/train_archive_ranker.py` dùng pipeline candidate generation hiện có (Popularity, ItemKNN, Content-Based), 31 đặc trưng, 5 cửa sổ train theo thời gian; LightGBM Classifier phát xác suất để xếp hạng, tương thích loại model LC-1 hiện tại.
+- Cấu hình: `num_leaves=15`, `learning_rate=0.05`, tối đa 500 cây, 4 jobs; early stopping trên validation.
+- Tập huấn luyện có 891.234 cặp user-candidate; validation có 394.991 cặp. Candidate recall tại các cửa sổ train khoảng 11,7–13,2%, nên hiệu năng end-to-end còn bị giới hạn bởi candidate retrieval.
+- Kết quả NDCG@10: validation **0,08664**; test window 2020-02-01 **0,07145**; test window 2020-02-15 **0,07141**. Trên cùng candidate set, popularity baseline lần lượt đạt 0,04783 / 0,03324 / 0,03064. Đây là benchmark REES46 và các cửa sổ test này đã được dùng trong đánh giá trước đó; không xem là holdout mới độc lập.
+- Model mới lưu tại `models/experiments/archive_lgbm_giftly_20261107/ranker_experiment.pkl`; báo cáo chi tiết tại `data/experiments/archive_lgbm_giftly_20261107/metrics.json`.
+- Model serving cũ `models/ranker_best_model.pkl` được giữ nguyên (SHA-256 `1d11488782894eae3b4eb142943303f4c9e85d0784f800047396d4f444eea8ff`). Model thử nghiệm chưa được tích hợp FastAPI hoặc gắn nhãn là model quà tặng.
+
+### Giới hạn và bước tiếp theo
+
+`archive` là log hành vi e-commerce tổng quát; dữ liệu không có dịp tặng, người nhận, sở thích quà tặng hay ngữ cảnh ngân sách. Vì thế kết quả chứng minh pipeline có thể train/rank trên REES46, không chứng minh mô hình phù hợp riêng cho quà tặng. Bước tiếp theo là chuẩn hóa nhãn/event Giftly, tích lũy log trên catalog quà tặng, bổ sung đặc trưng dịp/người nhận/ngân sách và đánh giá theo temporal holdout mới trước khi thay model serving.
+
+**Cập nhật an toàn sau lần chạy lịch sử:** các số test ở trên thuộc lượt chạy cũ và hai cửa sổ đó đã được dùng; không xem chúng là holdout mới. `scripts/train_archive_ranker.py` hiện chỉ chấm validation và chủ động để `test_1`/`test_2` chưa chấm. Quy trình và giới hạn archive được ghi tại [`docs/ML_ARCHIVE_WORKFLOW.md`](docs/ML_ARCHIVE_WORKFLOW.md). Artifact archive tiếp tục nằm riêng trong `experiments/`; LC-1 serving không bị thay.

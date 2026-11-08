@@ -1,4 +1,16 @@
-# Giftly — Hệ thống kinh doanh và gợi ý quà tặng
+# Giftly — Phát triển hệ thống đề xuất sản phẩm dựa trên học máy trong ngách quà tặng
+
+## Định hướng đồ án
+
+Đề tài chính của Giftly là **phát triển và đánh giá hệ thống đề xuất sản phẩm dựa trên học máy cho sản phẩm quà tặng**. Website bán hàng là lớp ứng dụng để quản lý catalog, thu thập tín hiệu xem/giỏ hàng/đặt mua và trình bày gợi ý; thanh toán, vận chuyển và admin là nghiệp vụ hỗ trợ, không phải đóng góp nghiên cứu chính.
+
+Trạng thái cần phân biệt rõ:
+
+- **Đã có mô hình học máy:** Ranker LightGBM LC-1 được huấn luyện và đánh giá offline trên dữ liệu REES46 eCommerce tổng quát.
+- **Đã có tích hợp demo:** backend có thể gọi model service và hiển thị nguồn/phần giải thích cho các hồ sơ demo được ánh xạ.
+- **Chưa chứng minh là mô hình quà tặng đã hoàn chỉnh:** dữ liệu train không phải dữ liệu Giftly; chưa có đánh giá offline trên tập quà tặng riêng, và hành vi của khách Giftly chưa được dùng để huấn luyện/retrain LC-1. Gift Finder hiện lọc ứng viên theo dịp, người nhận, ngân sách và thuộc tính rồi xếp hạng bằng content baseline/rule fallback.
+
+Vì vậy, các chỉ số LC-1 trong tài liệu là kết quả trên REES46, không phải bằng chứng hiệu năng trên người dùng hoặc sản phẩm Giftly. Lộ trình nghiên cứu tiếp theo là chuẩn hóa sự kiện Giftly, xây dựng tập dữ liệu gắn nhãn phù hợp với quà tặng, so sánh baseline với mô hình học máy, rồi đánh giá trên tập test tách theo thời gian.
 
 Giftly is a gift commerce project. The workspace contains React/Vite, Express 5, MySQL 8 and Redis. MySQL-backed features include registered-user and guest carts, accounts, catalog, checkout, inventory ledger, orders, reviews, returns, notifications and admin tools.
 
@@ -8,7 +20,8 @@ Giftly is a gift commerce project. The workspace contains React/Vite, Express 5,
 - `core-backend/`: Express 5 API, `mysql2`, bcryptjs, JWT và Redis health check.
 - `database/schema.sql`: schema nền ban đầu.
 - `database/migrations/`: migration lặp an toàn, gồm khởi tạo schema nền, nghiệp vụ cửa hàng, thanh toán và vận chuyển.
-- `ml-service/`: FastAPI service phục vụ mô hình học máy xếp hạng quà tặng Ranker LC-1 (LightGBM Ranker đã huấn luyện và đóng băng), tích hợp fallback Rule/TF-IDF và Popularity.
+- `ml-service/`: FastAPI serving cho LightGBM Ranker LC-1 đã huấn luyện trên REES46 và các endpoint baseline nội dung/popularity; phạm vi dữ liệu và giới hạn miền quà tặng được ghi ở phần đề tài.
+- Quy trình sử dụng dữ liệu `D:\NAM4\DACN\archive` cho benchmark offline, không trộn ID/catalog và không chấm test tự động: [docs/ML_ARCHIVE_WORKFLOW.md](docs/ML_ARCHIVE_WORKFLOW.md).
 
 ## Chạy local
 
@@ -70,7 +83,7 @@ Lệnh chỉ nâng vai trò tài khoản đang hoạt động có email trùng k
 
 1. Trang chủ lấy danh mục, số sản phẩm, sản phẩm nổi bật, mới nhất và mức tương tác từ catalog MySQL. Catalog `/products` có phân trang; tìm theo tên/mô tả/danh mục; lọc danh mục, khoảng giá, dịp, người nhận, sở thích, phong cách, loại quà và tồn kho; sắp xếp mới, giá, mức tương tác hoặc đánh giá.
 2. Chi tiết `/products/:id`: trạng thái tồn kho, đánh giá đã duyệt và sản phẩm liên quan.
-3. Gift Finder `/gift-finder`: xếp hạng sản phẩm đang bán theo tags thật trong catalog, ngân sách và sở thích; mỗi gợi ý nêu tiêu chí khớp. Lượt tìm và click từ Gift Finder được ghi thành sự kiện MySQL. Đây là content matching có thể giải thích, không phải mô hình AI đã huấn luyện hay cá nhân hóa.
+3. Gift Finder `/gift-finder`: lọc sản phẩm đang bán theo dịp, người nhận, ngân sách và metadata quà tặng; Python content baseline có thể xếp hạng lại ứng viên, còn Node rule matching là fallback. Mỗi gợi ý nêu tiêu chí khớp; lượt tìm và click được ghi vào MySQL. Đây là baseline nội dung có thể giải thích, chưa phải LC-1 và chưa cá nhân hóa theo lịch sử từng người.
 4. Visitors can add items to a browser-local cart and review current catalog prices and stock. Signing in merges those rows into the account cart; checkout remains account-only. Addresses, favorites, orders and deletion requests require an account.
 5. Checkout hỗ trợ COD và VNPAY sandbox khi cấu hình đủ merchant credentials; callback có chữ ký mới xác nhận thanh toán. Phí giao mặc định `SHIPPING_FEE=30000`; miễn phí từ `FREE_SHIPPING_MINIMUM=500000`. Đơn, chi tiết, lịch sử, coupon usage, thông báo và trừ kho được ghi trong transaction.
 6. Khách tìm đơn theo mã/trạng thái, xem lịch sử vận chuyển nội bộ, mua lại bằng cách chép sản phẩm còn hoạt động/còn hàng vào giỏ, hủy đơn `PENDING`, gửi yêu cầu đổi trả sau `DELIVERED` và theo dõi phản hồi. Giá hiện tại được tính lại ở giỏ/checkout; GHN có adapter tạo vận đơn/webhook tùy cấu hình, còn tracking nội bộ được giữ làm phương án dự phòng.
@@ -198,11 +211,11 @@ Trang chủ gửi request `GET /api/products/recommendations?limit=8` và render
    - Hệ thống tự động kích hoạt bộ lọc bảo vệ: chỉ lấy 14 sản phẩm thật trong catalog, loại bỏ hoàn toàn 188 sản phẩm synthetic (`is_synthetic_display = TRUE`).
    - Gợi ý chuyển sang fallback an toàn (`source: "python_content_baseline"` hoặc `"node_fallback"`) dựa trên mức độ quan tâm gần đây và thuộc tính danh mục quà tặng.
 
-### Giới hạn kỹ thuật thực tế (Technical Limitations):
-- **Snapshot dữ liệu tĩnh:** Bộ đặc trưng và ma trận ItemKNN được huấn luyện trên snapshot tĩnh (tháng 01/2020) từ REES46 eCommerce events.
-- **Phạm vi cá nhân hóa:** Hiện tại chỉ có 3 tài khoản demo được liên kết `ml_user_id` sang REES46 để đi qua mô hình Ranker LC-1.
+### Giới hạn kỹ thuật và phạm vi nghiên cứu hiện tại
+- **Lệch miền dữ liệu:** Bộ đặc trưng và ma trận ItemKNN được huấn luyện trên snapshot REES46 eCommerce (tháng 01/2020), là dữ liệu bán lẻ tổng quát chứ không phải dữ liệu hành vi tặng quà Giftly. Các chỉ số NDCG đã nêu chỉ áp dụng cho các tập REES46 tương ứng.
+- **Phạm vi cá nhân hóa LC-1:** Chỉ các tài khoản demo được liên kết `ml_user_id` sang REES46 mới có thể đi qua nhánh warm-user của Ranker LC-1. Khách thông thường dùng fallback trên tín hiệu và metadata Giftly; chưa có bằng chứng cá nhân hóa học máy trên người dùng thật của Giftly.
 - **Sản phẩm tổng hợp:** 188 sản phẩm REES46 hiển thị là dữ liệu tổng hợp (`is_synthetic_display = TRUE`) nhằm mục đích demo xếp hạng mô hình; ảnh sản phẩm lấy từ Unsplash cần được rà soát giấy phép bản quyền trước khi đưa vào kinh doanh thương mại.
-- **Chưa học trực tuyến:** Hệ thống gợi ý chưa tự động cập nhật trọng số mô hình hoặc học trực tuyến từ các tương tác mới phát sinh trên Giftly (retrain batch chưa kết nối online).
+- **Chưa có vòng lặp học từ Giftly:** Sự kiện Giftly được lưu cho tín hiệu gợi ý hiện thời, nhưng chưa có pipeline xuất dữ liệu, huấn luyện/retrain LC-1 trên dữ liệu Giftly, kiểm định chất lượng dữ liệu và triển khai model mới có versioning.
 - **Trạng thái Docker:** `docker compose` hiện chỉ chạy `ml-service` (`gift_ml_service`), `mysql-db` (`gift_mysql`) và `redis-cache` (`gift_redis`). `core-backend` và `core-frontend` vẫn chạy trực tiếp bằng Node.js ngoài Docker.
 
 Example response shape:
@@ -274,7 +287,7 @@ Payment endpoints:
 
 GHN is optional and remains disabled until staging credentials, sender address and a webhook secret are configured. An admin can create a shipment for an eligible order with `POST /api/admin/orders/:orderId/shipments/ghn`, passing `weightGrams`, `lengthCm`, `widthCm` and `heightCm`. GHN status callbacks use `POST /api/shipments/ghn/webhook`; configure the `x-giftly-shipping-secret` header and expected Shop ID. Creation uses the order code as the provider idempotency code. Webhook events are deduplicated and a state machine rejects older or backward state changes. Saved addresses now persist whether they use the current ward/province scheme or the legacy ward/district/province scheme; migration 010 defaults existing rows to the legacy format. Enter administrative names exactly as GHN expects—Giftly does not yet offer GHN catalog-backed address selectors. Checkout delivery prices remain local estimates, not GHN quotes. See the [GHN API docs](https://developer.ghn.dev/en/docs) and [webhook docs](https://developer.ghn.dev/en/docs/webhook/callback-order-status).
 
-The Python service provides `/health`, `/model`, `/recommendations`, `/gift-finder` and `/similar`. It is a content/rules baseline, not a trained model. Express can use it for homepage recommendations and Gift Finder: it sends current catalog candidates plus activity or gift context, validates returned IDs and falls back to Node ranking if Python is unavailable. Gift Finder retains its existing Node candidate matching before Python reorders those candidates. Start it from `ml-service`:
+The Python service provides `/health`, `/model`, `/recommend/rank`, `/recommendations`, `/gift-finder` and `/similar`. `/recommend/rank` serves the frozen LightGBM LC-1 model for compatible REES46 IDs; `/recommendations` and `/gift-finder` are content/rule baselines, not the trained ranker. Express validates returned product IDs and falls back to Node ranking if Python is unavailable. Gift Finder filters candidates against Giftly's real, sellable catalog before the Python content baseline can reorder them. LC-1's offline metrics are from REES46; Giftly-domain evaluation and retraining remain open work. Start the service from `ml-service`:
 
 ```powershell
 python -m venv .venv

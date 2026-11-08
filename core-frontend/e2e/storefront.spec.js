@@ -690,13 +690,13 @@ test('demo account sees synthetic demo badge and disabled purchase button, while
     expect(catalogRes.ok()).toBeTruthy();
     const publicProducts = (await catalogRes.json()).data.items;
     const syntheticInCatalog = publicProducts.find(
-      (p) => p.isSyntheticDisplay || p.name === 'Sản phẩm REES46 Demo Synthetic'
+      (p) => p.isSyntheticDisplay || p.name === 'Sản phẩm Demo Synthetic Lifestyle'
     );
     expect(syntheticInCatalog).toBeUndefined();
 
     // 2. Kiểm tra trên giao diện catalog khách thường: không thấy sản phẩm synthetic
     await page.goto('/products');
-    await expect(page.getByText('Sản phẩm REES46 Demo Synthetic')).not.toBeVisible();
+    await expect(page.getByText('Sản phẩm Demo Synthetic Lifestyle')).not.toBeVisible();
 
     // 3. Lấy trực tiếp ID sản phẩm synthetic từ database test
     const mysql = require('../../core-backend/node_modules/mysql2/promise');

@@ -138,7 +138,8 @@ async function detail(req, res, next) {
                 return res.status(404).json({ success: false, message: 'Product not found.' });
             }
         }
-        await pool.execute("INSERT INTO product_events (user_id,product_id,event_type) VALUES (?,?,'VIEW')", [req.user?.id || null, req.params.id]);
+        const isSimulated = Boolean(req.body?.isSimulated || req.headers?.['x-simulated'] === 'true');
+        await pool.execute("INSERT INTO product_events (user_id,product_id,event_type,is_simulated) VALUES (?,?,'VIEW',?)", [req.user?.id || null, req.params.id, isSimulated ? 1 : 0]);
         const [images] = await pool.execute('SELECT image_url,alt_text FROM product_images WHERE product_id=? ORDER BY sort_order,id', [req.params.id]);
         const product = { ...present(rows[0]), images:[
             ...(rows[0].image_url ? [{url:rows[0].image_url,altText:rows[0].name}] : []),
@@ -212,8 +213,9 @@ async function track(req, res, next) {
                 return res.status(404).json({success:false,message:'Product not found.'});
             }
         }
-        await pool.execute('INSERT INTO product_events (user_id,product_id,event_type,search_term,context) VALUES (?,?,?,?,?)',
-            [req.user?.id || null, productId || null, eventType, searchTerm || null, contextJson]);
+        const isSimulated = Boolean(req.body?.isSimulated || req.headers?.['x-simulated'] === 'true');
+        await pool.execute('INSERT INTO product_events (user_id,product_id,event_type,search_term,context,is_simulated) VALUES (?,?,?,?,?,?)',
+            [req.user?.id || null, productId || null, eventType, searchTerm || null, contextJson, isSimulated ? 1 : 0]);
         return res.status(202).json({ success: true });
     } catch (error) { return next(error); }
 }
