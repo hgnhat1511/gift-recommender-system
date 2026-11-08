@@ -153,7 +153,6 @@ async function finder(req, res, next) {
         }
         const [rows] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p
             LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='ACTIVE' AND p.stock>0
-            AND (p.is_synthetic_display = FALSE OR p.is_synthetic_display IS NULL)
             AND (? IS NULL OR p.price<=?) ORDER BY p.is_featured DESC,p.id DESC LIMIT 200`, [budget, budget]);
         const norm = (value) => String(value || '').trim().toLowerCase();
         const scored = rows.map((row) => {
