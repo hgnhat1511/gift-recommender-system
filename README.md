@@ -85,7 +85,7 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Frontend mặc định gọi `http://localhost:5000/api`. Có thể đặt `VITE_API_BASE_URL`; CORS backend dùng `CORS_ORIGIN` (danh sách origin phân tách dấu phẩy). Khi backend chạy trong cùng Docker network, dùng `mysql-db` và `redis-cache` thay cho `localhost`.
+Frontend mặc định gọi `http://localhost:5000/api`. Nếu cổng `5173` đang bận, Vite tự chọn cổng kế tiếp (ví dụ `5174`); backend cho phép origin loopback ở chế độ development để lần chạy đó vẫn gọi API được. Trong production, backend chỉ cho phép origin liệt kê trong `CORS_ORIGIN` (danh sách origin phân tách dấu phẩy). Có thể đặt `VITE_API_BASE_URL` nếu backend dùng cổng khác. Khi backend chạy trong cùng Docker network, dùng `mysql-db` và `redis-cache` thay cho `localhost`.
 
 Kiểm tra service:
 
@@ -177,7 +177,7 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 
 ## Kiểm tra đã thực hiện
 
-Verification snapshot (2026-11-11): backend suite 148 tests, 148 pass, 0 fail, 0 skipped on giftly_e2e_test; frontend unit 24 pass; lint and build pass; Playwright 28/28 pass. Docker project giftly_clean_20261111 ran all 5 services on a separate giftly_e2e_test database, applied all 16 migrations and seeded demo fixtures. REES46 demo login through the container backend returned source=ranker_lc1 with 8 recommendations; ML /health and frontend HTTP checks returned healthy/200. Host ports 3000, 5000 and 3306 were occupied, so this run used ports 3001, 5002 and 13307 (plus 16380 and 8001). The project was stopped with docker compose down, without -v; its named volumes remain.
+Verification snapshot (2026-11-11): backend suite 151 tests, 151 pass, 0 fail, 0 skipped on giftly_e2e_test; frontend unit 24 pass; lint and build pass; Playwright 28/28 pass. Local CORS preflight from `http://localhost:5174` to backend port 5000 returned 204 with the matching allow-origin header. Docker project giftly_clean_20261111 ran all 5 services on a separate giftly_e2e_test database, applied all 16 migrations and seeded demo fixtures. REES46 demo login through the container backend returned source=ranker_lc1 with 8 recommendations; ML /health and frontend HTTP checks returned healthy/200. Host ports 3000, 5000 and 3306 were occupied, so this run used ports 3001, 5002 and 13307 (plus 16380 and 8001). The project was stopped with docker compose down, without -v; its named volumes remain.
 
 Lượt backend đầu tiên khi chưa nạp fixture demo có test đỏ; chạy lại sau khi nạp fixture bằng `--seed-demo` đạt kết quả nêu trên, không sửa assertion. Các trang tải theo route để giảm JavaScript ban đầu; build hiện không còn cảnh báo chunk vượt ngưỡng 500 kB.
 

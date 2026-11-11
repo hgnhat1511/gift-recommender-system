@@ -15,13 +15,18 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
 const shipperRoutes = require('./routes/shipperRoutes');
 const deliveryProofRoutes = require('./routes/deliveryProofRoutes');
+const { isAllowedOrigin } = require('./utils/corsPolicy');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
     .split(',').map((origin) => origin.trim()).filter(Boolean);
-app.use(cors({ origin: allowedOrigins }));
+app.use(cors({
+    origin(origin, callback) {
+        callback(null, isAllowedOrigin(origin, { nodeEnv: process.env.NODE_ENV, allowedOrigins }));
+    }
+}));
 app.use(express.json({ limit: '10kb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/products', catalogRoutes);

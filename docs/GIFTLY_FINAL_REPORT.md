@@ -6,10 +6,11 @@ Ngày chạy: 2026-11-11. Nhánh: `feature/giftly-luong-giao-hang`. Báo cáo n�
 
 | Hạng mục | Mức xác minh | Lệnh / thao tác | Output ghi nhận |
 |---|---|---|---|
-| Backend | Đã chạy | `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; `node --test --test-reporter=spec --test-concurrency=1` tại `core-backend` | Thô: `ℹ tests 148`, `ℹ suites 15`, `ℹ pass 148`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 0`, `ℹ todo 0`, `ℹ duration_ms 83424.8761`; có thêm `test/integration/dev-shipper-script.test.js` |
+| Backend | Đã chạy | `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; `node --test --test-reporter=spec --test-concurrency=1` tại `core-backend` | Thô: `ℹ tests 151`, `ℹ suites 15`, `ℹ pass 151`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 0`, `ℹ todo 0`, `ℹ duration_ms 76098.4917`; thêm test CORS local |
 | Frontend unit | Đã chạy | `npm.cmd test` tại `core-frontend` | Thô: `# tests 24`, `# pass 24`, `# fail 0`, `# skipped 0` |
 | Frontend lint | Đã chạy | `npm.cmd run lint` | Thô: `eslint .`, exit code `0` |
-| Frontend build | Đã chạy | `npm.cmd run build` | Thô: `✓ 1998 modules transformed`, `✓ built in 539ms`; exit code `0` |
+| Frontend build | Đã chạy | `npm.cmd run build` | Thô: `✓ 1998 modules transformed`, `✓ built in 673ms`; exit code `0` |
+| CORS khi Vite dùng cổng dự phòng | Đã chạy | `curl.exe -sS -i -X OPTIONS http://localhost:5000/api/auth/login -H "Origin: http://localhost:5174" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type,authorization"` | Thô: `HTTP/1.1 204 No Content`, `Access-Control-Allow-Origin: http://localhost:5174`; production chỉ chấp nhận origin cấu hình theo test policy |
 | Giao diện Playwright | Đã chạy | `npx.cmd playwright test -c playwright-visual.config.js e2e/phase5-commerce-ui.spec.js` | Thô: `3 passed (5.5s)` |
 | Playwright E2E | Đã chạy | `PLAYWRIGHT_DB_NAME=giftly_e2e_test`, secret test-only; `npx.cmd playwright test` | Thô: `28 passed (1.4m)`. Hai lượt chạy hoàn tất; lượt cuối gồm assertion UI shipper A không thấy đơn của shipper B. |
 | Database backend | Đã chạy trên DB `_test` | `node scripts/resetTestDb.js giftly_e2e_test --seed-demo` | Thô: `SELECT DATABASE(): giftly_e2e_test`, `Đã áp dụng toàn bộ 16 file migrations`, `Hoàn tất ... 27 bảng`; seed tạo 1.000 sản phẩm demo, 14 sản phẩm cơ sở và 2.000 đơn mô phỏng. Chỉ reset `giftly_e2e_test`. |
@@ -35,6 +36,7 @@ Backend spec suite được chạy lại từng file theo thứ tự, với `DB_
 | Backend test file | Output `tests / pass / fail / skipped` |
 |---|---|
 | `test/cart-inventory.test.js` | `6 / 6 / 0 / 0` |
+| `test/cors-policy.test.js` | `3 / 3 / 0 / 0` |
 | `test/cart-items-contract.test.js` | `14 / 14 / 0 / 0` |
 | `test/cart-merge-contract.test.js` | `5 / 5 / 0 / 0` |
 | `test/db-guard.test.js` | `1 / 1 / 0 / 0` |
@@ -62,7 +64,7 @@ Backend spec suite được chạy lại từng file theo thứ tự, với `DB_
 | `test/simulation-impact.test.js` | `4 / 4 / 0 / 0` |
 | `test/synthetic-products-protection.test.js` | `8 / 8 / 0 / 0` |
 | `test/vnpay.test.js` | `3 / 3 / 0 / 0` |
-| **Tổng chạy riêng từng file** | **`148 / 148 / 0 / 0`** |
+| **Tổng chạy riêng từng file** | **`151 / 151 / 0 / 0`** |
 
 ## Quy tắc nghiệp vụ đã đối chiếu
 

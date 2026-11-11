@@ -342,5 +342,13 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 - Khóa `scripts/createDevShipper.js`: từ chối production, yêu cầu cả `DB_NAME` và `TEST_DB_NAME` đúng bằng `giftly_e2e_test`, rồi kiểm tra `SELECT DATABASE()` trước khi ghi. Tên, email và mật khẩu lấy từ biến môi trường; mật khẩu dài 8–72 byte. Thêm lệnh `npm.cmd run shipper:create:dev` và hướng dẫn README.
 - Test mục tiêu: `node --test --test-reporter=spec test/integration/dev-shipper-script.test.js` với `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; output xác nhận `[dev-shipper-script.test.js] SELECT DATABASE(): giftly_e2e_test`, `tests 1`, `pass 1`, `fail 0`, `skipped 0`.
-- Backend suite chạy lại: `node --test --test-reporter=spec --test-concurrency=1` trên `giftly_e2e_test`; `tests 148`, `pass 148`, `fail 0`, `cancelled 0`, `skipped 0`, `duration_ms 83424.8761`. Output thô lưu tạm trong `core-backend/backend-suite-current.log` khi kiểm tra; file log không thuộc thay đổi sẽ commit.
+- Backend suite chạy lại: `node --test --test-reporter=spec --test-concurrency=1` trên `giftly_e2e_test`; `tests 148`, `pass 148`, `fail 0`, `cancelled 0`, `skipped 0`, `duration_ms 83424.8761`. Output được ghi vào log tạm để lấy số liệu; log đã xóa sau khi kiểm tra.
 - Không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`; không chạy migration.
+
+## Sửa CORS khi Vite chuyển cổng (2026-11-11)
+
+- Nguyên nhân: Vite tự chuyển từ `5173` sang `5174` khi cổng mặc định đang bận, nhưng backend trước đó chỉ cho phép origin được cấu hình, mặc định là `http://localhost:5173`.
+- Chế độ development hiện chấp nhận origin loopback `localhost`, `127.0.0.1`, `[::1]` qua HTTP/HTTPS trên cổng bất kỳ. Production vẫn chỉ nhận origin trong `CORS_ORIGIN`. README giải thích hành vi cổng dự phòng.
+- Kiểm thử policy: `node --test --test-reporter=spec test/cors-policy.test.js` — `tests 3`, `pass 3`, `fail 0`. Backend suite trên `giftly_e2e_test`: `tests 151`, `pass 151`, `fail 0`, `skipped 0`, `duration_ms 76098.4917`.
+- Kiểm tra preflight thực tế: `curl.exe -sS -i -X OPTIONS http://localhost:5000/api/auth/login -H "Origin: http://localhost:5174" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type,authorization"` trả `HTTP/1.1 204 No Content` và `Access-Control-Allow-Origin: http://localhost:5174`.
+- Frontend: `npm.cmd run lint` exit 0; `npm.cmd run build` exit 0, 1998 modules transformed. Không chạy migration; không ghi vào database ngoài `giftly_e2e_test`.
