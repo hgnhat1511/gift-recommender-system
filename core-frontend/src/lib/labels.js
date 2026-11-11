@@ -161,6 +161,8 @@ export const NOTIFICATION_TYPE = Object.freeze({
 });
 
 export const INVENTORY_REASON = Object.freeze({
+  'Playwright E2E stock intake': 'Nhập kho kiểm thử Playwright',
+  'Playwright E2E stock rollback': 'Hoàn kho kiểm thử Playwright',
   // Chuỗi cũ tiếng Anh từ git baseline (cfdfdb6 & a310d78)
   'Customer order': 'Đơn hàng của khách',
   'Order cancelled; stock restored': 'Hủy đơn; hoàn tồn kho',
@@ -274,6 +276,8 @@ export function getShippingMethodLabel(method) {
 }
 
 const GHN_STATUS_MAP = Object.freeze({
+  '\u0110ANG PH\u00c1T H\u00c0NG': 'OUT_FOR_DELIVERY',
+  'GIAO TH\u00c0NH C\u00d4NG': 'DELIVERED',
   READY_TO_PICK: 'READY_FOR_PICKUP',
   DELIVERING: 'OUT_FOR_DELIVERY',
   DELIVERY_FAIL: 'DELIVERY_FAILED',

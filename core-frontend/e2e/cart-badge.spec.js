@@ -314,7 +314,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     await page.goto('/');
 
     // Trên trang chủ có nút giỏ hàng .cart-button
-    const cartBtn = page.locator('.cart-button');
+    const cartBtn = page.getByRole('button', { name: /Giỏ hàng/ });
     await expect(cartBtn).toBeVisible();
 
     // Thêm món 1 qua UI catalog
@@ -324,12 +324,12 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     await firstAddBtn.click();
 
     // Badge cập nhật thành 1 trên StoreLayout
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('1');
 
     // Quay lại trang chủ, badge trên header trang chủ vẫn hiển thị 1
     await page.goto('/');
-    const homeBadge = page.locator('.cart-count');
+    const homeBadge = page.locator('.site-cart-badge');
     await expect(homeBadge).toHaveText('1');
   });
 
@@ -346,7 +346,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     await expect(addBtn).toBeVisible();
     await addBtn.click();
 
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('1');
   });
 
@@ -375,7 +375,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     await mergeResponsePromise;
 
     // Sau khi đăng nhập thành công và merge guest cart, chuyển về trang chủ hoặc giỏ hàng
-    await expect(page).toHaveURL(/http:\/\/localhost:5173\/?(cart)?/);
+    await expect(page).toHaveURL(/\/(cart)?$/);
 
     // Xác minh hợp đồng merge thật sự: backend nhận đúng mergeKey và items
     expect(capturedMergePayload).not.toBeNull();
@@ -383,7 +383,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     expect(capturedMergePayload.items).toEqual([{ productId: '1', quantity: 2, selected: true }]);
 
     await page.goto('/products');
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('2');
   });
 
@@ -400,16 +400,16 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
     // Vào trang /products để thấy header StoreLayout có nút đăng xuất
     await page.goto('/products');
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('4');
 
     // Thực hiện đăng xuất qua nút Thoát trong StoreLayout
-    const logoutBtn = page.getByRole('button', { name: 'Thoát' });
+    const logoutBtn = page.locator('button.site-subnav-logout');
     await expect(logoutBtn).toBeVisible();
     await logoutBtn.click();
 
     // Sau khi đăng xuất, giỏ khách trống nên badge không còn hiển thị
-    await expect(page.locator('.store-layout-cart-count')).not.toBeVisible();
+    await expect(page.locator('.site-cart-badge')).not.toBeVisible();
   });
 
   // Ca 5: Thêm từ /favorites
@@ -428,7 +428,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     await expect(addBtn).toBeVisible();
     await addBtn.click();
 
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('1');
   });
 
@@ -446,7 +446,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
 
     // Điều hướng sang /cart
     await expect(page).toHaveURL(/\/cart/);
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('2');
   });
 
@@ -463,7 +463,7 @@ test.describe('Cart Badge & State Synchronization (Fully Mocked API, Vite Only)'
     setupApiMocks(page, { initialCartItems: mockCart });
 
     await page.goto('/cart');
-    const badge = page.locator('.store-layout-cart-count');
+    const badge = page.locator('.site-cart-badge');
     await expect(badge).toHaveText('3'); // Tổng số lượng: 2 + 1 = 3
   });
 });

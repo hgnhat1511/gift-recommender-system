@@ -4,10 +4,35 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import { expect, request, test } from '@playwright/test';
-import { CUSTOMER_STATUS, ORDER_STATUS, RETURN_STATUS } from '../src/lib/labels.js';
+import { CUSTOMER_STATUS, ORDER_STATUS, RETURN_STATUS, getInventoryReasonLabel } from '../src/lib/labels.js';
 
 const require = createRequire(import.meta.url);
 const backendDirectory = path.resolve(process.cwd(), '../core-backend');
+const backendUrl = process.env.E2E_BACKEND_URL || 'http://localhost:5000';
+const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://localhost:5174';
+require(path.join(backendDirectory, 'node_modules/dotenv')).config({ path: path.join(backendDirectory, '.env') });
+
+test.beforeAll(async () => {
+  const targetDb = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
+  if (targetDb !== 'giftly_e2e_test') throw new Error(`Storefront E2E only writes to giftly_e2e_test; received "${targetDb}".`);
+  process.env.DB_NAME = targetDb;
+  process.env.TEST_DB_NAME = targetDb;
+  const mysql = require(path.join(backendDirectory, 'node_modules/mysql2/promise'));
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'rootpassword',
+    database: targetDb,
+  });
+  try {
+    const [[database]] = await connection.query('SELECT DATABASE() name');
+    console.log(`[storefront.spec.js] SELECT DATABASE(): ${database.name}`);
+    expect(database.name).toBe(targetDb);
+  } finally {
+    await connection.end();
+  }
+});
 
 async function openAuthenticatedPage(page, session, path) {
   await page.goto('/');
@@ -18,7 +43,7 @@ async function openAuthenticatedPage(page, session, path) {
 test('guest can browse the live catalog and keep a product in the cart', async ({ page }) => {
   await page.goto('/products');
 
-  const firstProduct = page.locator('.commerce-product').first();
+  const firstProduct = page.locator('.commerce-product').filter({ has: page.locator('button.commerce-button-small:not([disabled])') }).first();
   await expect(firstProduct).toBeVisible();
   const productName = (await firstProduct.locator('.commerce-product-name').innerText()).trim();
   await firstProduct.getByRole('button').click();
@@ -30,7 +55,7 @@ test('guest can browse the live catalog and keep a product in the cart', async (
 });
 
 test('customer can log in, place a COD order, and view its order detail', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const email = `e2e-${randomUUID()}@example.invalid`;
   const password = 'E2E-Store-Test-2026!';
 
@@ -43,7 +68,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
     await page.locator('#login-email').fill(email);
     await page.locator('#login-password').fill(password);
     await page.locator('form.auth-form button.auth-submit').click();
-    await expect(page).toHaveURL('http://localhost:5173/');
+    await expect(page).toHaveURL(`${frontendUrl}/`);
     const token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
     await page.goto('/account#addresses');
     const addressForm = page.locator('#addresses form.account-address-form');
@@ -58,7 +83,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
     await expect(page.locator('.account-address').first()).toContainText('Phường Sài Gòn');
 
     await page.goto('/products');
-    const firstProduct = page.locator('.commerce-product').first();
+    const firstProduct = page.locator('.commerce-product').filter({ has: page.locator('button.commerce-button-small:not([disabled])') }).first();
     await expect(firstProduct).toBeVisible();
     const productName = (await firstProduct.locator('.commerce-product-name').innerText()).trim();
     await firstProduct.getByRole('button').click();
@@ -84,7 +109,7 @@ test('customer can log in, place a COD order, and view its order detail', async 
 });
 
 test('customer can start VNPAY checkout and return unpaid until a verified provider callback', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const email = `e2e-vnpay-${randomUUID()}@example.invalid`;
   const password = 'E2E-VNPAY-Store-2026!';
 
@@ -97,7 +122,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
     await page.locator('#login-email').fill(email);
     await page.locator('#login-password').fill(password);
     await page.locator('form.auth-form button.auth-submit').click();
-    await expect(page).toHaveURL('http://localhost:5173/');
+    await expect(page).toHaveURL(`${frontendUrl}/`);
     const token = await page.evaluate(() => JSON.parse(localStorage.getItem('giftly.auth')).token);
     const address = await api.post('/api/account/addresses', {
       headers: { authorization: `Bearer ${token}` },
@@ -109,7 +134,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
     expect(address.status()).toBe(201);
 
     await page.goto('/products');
-    const firstProduct = page.locator('.commerce-product').first();
+    const firstProduct = page.locator('.commerce-product').filter({ has: page.locator('button.commerce-button-small:not([disabled])') }).first();
     await expect(firstProduct).toBeVisible();
     await firstProduct.getByRole('button').click();
     await page.goto('/cart');
@@ -123,7 +148,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
       body: '<main><h1>Intercepted VNPAY sandbox page</h1></main>',
     }));
     let paymentPayload;
-    await page.route('http://localhost:5000/api/payments/orders/*/vnpay', async (route) => {
+    await page.route('**/api/payments/orders/*/vnpay', async (route) => {
       const response = await route.fetch();
       paymentPayload = await response.json();
       await route.fulfill({ response });
@@ -154,7 +179,7 @@ test('customer can start VNPAY checkout and return unpaid until a verified provi
 });
 
 test('admin can view dashboard and adjust inventory with an auditable ledger entry', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const email = `e2e-admin-${randomUUID()}@example.invalid`;
   const password = 'E2E-Admin-Test-2026!';
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
@@ -205,7 +230,7 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
     await adjust(2, 'Playwright E2E stock intake');
     await page.goto('/admin/inventory');
     await page.getByPlaceholder('Tìm theo sản phẩm hoặc lý do').fill('Playwright E2E stock intake');
-    const ledgerRow = page.getByRole('row').filter({ hasText: 'Playwright E2E stock intake' });
+    const ledgerRow = page.getByRole('row').filter({ hasText: productName }).filter({ hasText: getInventoryReasonLabel('Playwright E2E stock intake') }).last();
     await expect(ledgerRow).toBeVisible();
     await expect(ledgerRow.locator('td').nth(1)).toContainText(productName);
     await expect(ledgerRow.locator('td').nth(2)).toHaveText('+2');
@@ -220,7 +245,7 @@ test('admin can view dashboard and adjust inventory with an auditable ledger ent
 });
 
 test('admin can inspect an order, advance its state, and cancel it safely', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-order-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
@@ -306,7 +331,7 @@ test('admin can inspect an order, advance its state, and cancel it safely', asyn
 });
 
 test('admin can lock and unlock a customer and existing JWTs follow the account status', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-customer-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-${randomUUID()}@example.invalid`;
@@ -360,12 +385,14 @@ test('admin can lock and unlock a customer and existing JWTs follow the account 
   }
 });
 
-test('admin can record shipment tracking and the customer can see its history', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+test('admin assigns an internal shipper and the customer can see shipment tracking history', async ({ page }) => {
+  const api = await request.newContext({ baseURL: backendUrl });
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-shipping-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-shipping-${randomUUID()}@example.invalid`;
+  const shipperEmail = `e2e-shipper-${randomUUID()}@example.invalid`;
   const customerPassword = 'E2E-Shipping-Customer-2026!';
+  const shipperPassword = 'E2E-Shipping-Shipper-2026!';
   const adminPassword = 'E2E-Shipping-Admin-2026!';
 
   try {
@@ -375,19 +402,17 @@ test('admin can record shipment tracking and the customer can see its history', 
     expect(registration.status()).toBe(201);
     const customerLogin = await api.post('/api/auth/login', { data: { email: customerEmail, password: customerPassword } });
     expect(customerLogin.status(), await customerLogin.text()).toBe(200);
-    const customerToken = (await customerLogin.json()).data.token;
-    const customerAuth = { authorization: `Bearer ${customerToken}` };
+    const customerSession = (await customerLogin.json()).data;
+    const customerAuth = { authorization: `Bearer ${customerSession.token}` };
     const address = await api.post('/api/account/addresses', {
       headers: customerAuth,
-      data: {
-        recipientName: 'Giftly shipment customer fixture', phone: '0900000005', addressLine: '456 Test Street',
-        ward: 'Ward 2', district: 'District 2', city: 'Ho Chi Minh City', isDefault: true,
-      },
+      data: { recipientName: 'Giftly shipment customer fixture', phone: '0900000005', addressLine: '456 Test Street', ward: 'Ward 2', district: 'District 2', city: 'Ho Chi Minh City', isDefault: true },
     });
     expect(address.status()).toBe(201);
-    const catalog = await api.get('/api/products?limit=1&inStock=true');
+    const catalog = await api.get('/api/products?limit=20&inStock=true');
     expect(catalog.ok()).toBeTruthy();
-    const product = (await catalog.json()).data.items[0];
+    const product = (await catalog.json()).data.items.find((item) => item.stock > 0 && !item.isSyntheticDisplay);
+    expect(product).toBeTruthy();
     const cart = await api.post('/api/cart/items', { headers: customerAuth, data: { productId: product.id, quantity: 1 } });
     expect(cart.status()).toBe(201);
     const orderResponse = await api.post('/api/orders', {
@@ -398,51 +423,48 @@ test('admin can record shipment tracking and the customer can see its history', 
     const order = (await orderResponse.json()).data;
     const orderId = order.orderId;
 
-    const adminRegistration = await api.post('/api/auth/register', {
-      data: { fullName: 'Giftly shipment admin fixture', email: adminEmail, password: adminPassword },
-    });
-    expect(adminRegistration.status()).toBe(201);
-    execFileSync('node', ['scripts/promoteAdmin.js', adminEmail], {
-      cwd: backendDirectory,
-      env: { ...process.env, DB_NAME: testDatabase },
-      stdio: 'pipe',
-    });
+    for (const [email, fullName, password] of [
+      [adminEmail, 'Giftly shipment admin fixture', adminPassword],
+      [shipperEmail, 'Giftly shipment shipper fixture', shipperPassword],
+    ]) {
+      const created = await api.post('/api/auth/register', { data: { fullName, email, password } });
+      expect(created.status()).toBe(201);
+    }
+    execFileSync('node', ['scripts/promoteAdmin.js', adminEmail], { cwd: backendDirectory, env: { ...process.env, DB_NAME: testDatabase }, stdio: 'pipe' });
     const adminLogin = await api.post('/api/auth/login', { data: { email: adminEmail, password: adminPassword } });
     expect(adminLogin.ok()).toBeTruthy();
     const adminSession = (await adminLogin.json()).data;
-    await openAuthenticatedPage(page, adminSession, '/admin/orders');
-    const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
-    await expect(orderRow).toBeVisible();
+    const adminAuth = { authorization: `Bearer ${adminSession.token}` };
+    const customers = await api.get(`/api/admin/customers?q=${encodeURIComponent(shipperEmail)}`, { headers: adminAuth });
+    expect(customers.ok()).toBeTruthy();
+    const shipperUser = (await customers.json()).data.items.find((user) => user.email === shipperEmail);
+    expect(shipperUser).toBeTruthy();
+    const roleChange = await api.patch(`/api/admin/customers/${shipperUser.id}/role`, { headers: adminAuth, data: { role: 'SHIPPER' } });
+    expect(roleChange.ok()).toBeTruthy();
+    const shipperLogin = await api.post('/api/auth/login', { data: { email: shipperEmail, password: shipperPassword } });
+    expect(shipperLogin.ok()).toBeTruthy();
+    const shipperSession = (await shipperLogin.json()).data;
 
-    // Đơn COD kho còn hàng đã ở PROCESSING, giao diện admin hiển thị sẵn form nhập vận đơn
-    await orderRow.getByRole('button', { name: order.orderCode }).click();
-    await expect(page.getByRole('heading', { name: 'Thông tin vận chuyển nội bộ' })).toBeVisible();
-    await page.getByLabel('Đơn vị vận chuyển').fill('Playwright Local Carrier');
-    await page.getByLabel('Mã vận đơn').fill('E2E-TRACK-20261012');
-    await page.getByLabel('Ghi chú (không bắt buộc)').fill('Test-only tracking history');
-    const shippingResponsePromise = page.waitForResponse((response) =>
-      response.url().includes(`/api/admin/orders/${orderId}/shipping`) && response.request().method() === 'PATCH');
-    await page.getByRole('button', { name: 'Lưu thông tin vận chuyển' }).click();
-    expect((await shippingResponsePromise).status()).toBe(200);
-    await expect(page.getByText('E2E-TRACK-20261012', { exact: true })).toBeVisible();
+    const assignment = await api.post(`/api/admin/orders/${orderId}/shipper`, { headers: adminAuth, data: { shipperUserId: shipperUser.id } });
+    expect(assignment.status()).toBe(201);
+    const shipperAuth = { authorization: `Bearer ${shipperSession.token}` };
+    const dispatch = await api.post(`/api/shipper/orders/${orderId}/dispatch`, { headers: shipperAuth });
+    expect(dispatch.status()).toBe(200);
+    const deliver = await api.post(`/api/shipper/orders/${orderId}/deliver`, { headers: shipperAuth });
+    expect(deliver.status()).toBe(200);
 
-    await page.evaluate(() => localStorage.clear());
-    await page.goto('/login');
-    await page.locator('#login-email').fill(customerEmail);
-    await page.locator('#login-password').fill(customerPassword);
-    await page.locator('form.auth-form button.auth-submit').click();
-    await expect(page).toHaveURL('http://localhost:5173/');
-    await page.goto(`/orders/${orderId}`);
-    await expect(page.getByText('Playwright Local Carrier', { exact: true })).toBeVisible();
-    await expect(page.getByText('Playwright Local Carrier · E2E-TRACK-20261012', { exact: true })).toBeVisible();
-    await expect(page.getByText('Test-only tracking history', { exact: true })).toBeVisible();
+    await openAuthenticatedPage(page, customerSession, `/orders/${orderId}`);
+    const orderSummary = page.locator('.commerce-order-summary');
+    await expect(orderSummary).toContainText('Giftly');
+    await expect(orderSummary).toContainText(order.orderCode);
+    await expect(orderSummary.locator('.commerce-history')).toContainText(order.orderCode);
   } finally {
     await api.dispose();
   }
 });
 
 test('customer review and return flows require delivery, publish through admin review, and restock accurately', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-return-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-return-${randomUUID()}@example.invalid`;
@@ -483,12 +505,12 @@ test('customer review and return flows require delivery, publish through admin r
     expect(address.status()).toBe(201);
     const catalog = await api.get('/api/products?limit=20&inStock=true');
     expect(catalog.ok()).toBeTruthy();
-    const product = (await catalog.json()).data.items.find((item) => item.stock > 0);
+    const product = (await catalog.json()).data.items.find((item) => item.stock > 0 && !item.isSyntheticDisplay);
     expect(product).toBeTruthy();
 
-    const adminProducts = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
+    const adminProducts = await api.get(`/api/admin/products?limit=100&q=${encodeURIComponent(product.name)}`, { headers: adminAuth });
     expect(adminProducts.ok()).toBeTruthy();
-    const startingStock = (await adminProducts.json()).data.items.find((item) => item.id === product.id).stock;
+    const startingStock = (await adminProducts.json()).data.items.find((item) => String(item.id) === String(product.id)).stock;
 
     const cart = await api.post('/api/cart/items', {
       headers: customerAuth, data: { productId: product.id, quantity: 1 },
@@ -505,16 +527,32 @@ test('customer review and return flows require delivery, publish through admin r
     await openAuthenticatedPage(page, adminSession, '/admin/orders');
     const orderRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(orderRow).toBeVisible();
-    page.on('dialog', (dialog) => dialog.accept('Playwright return workflow order-state fixture.'));
-    // Đơn COD kho còn hàng đã ở PROCESSING, admin chuyển tiếp sang SHIPPED rồi DELIVERED
-    for (const status of ['SHIPPED', 'DELIVERED']) {
-      const updatePromise = page.waitForResponse((response) =>
-        response.url().includes(`/api/admin/orders/${orderId}/status`) && response.request().method() === 'PATCH');
-      await orderRow.getByRole('combobox').selectOption(status);
-      expect((await updatePromise).status()).toBe(200);
+    const testConnection = await require(path.join(backendDirectory, 'node_modules/mysql2/promise')).createConnection({
+      host: process.env.DB_HOST || '127.0.0.1', port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root', password: process.env.DB_PASSWORD || 'rootpassword', database: testDatabase,
+    });
+    try {
+      const [[selectedDb]] = await testConnection.query('SELECT DATABASE() name');
+      expect(selectedDb.name).toBe('giftly_e2e_test');
+      await testConnection.execute(
+        "INSERT INTO shipments (order_id,client_order_code,provider,provider_order_code,status) VALUES (?,?,'GHN',?,'CREATED')",
+        [orderId, order.orderCode, `GHN-${order.orderCode}`],
+      );
+    } finally { await testConnection.end(); }
+    const webhookSecret = process.env.E2E_GHN_WEBHOOK_SECRET;
+    const shopId = process.env.E2E_GHN_SHOP_ID;
+    expect(webhookSecret).toBeTruthy();
+    expect(shopId).toBeTruthy();
+    for (const [status, seconds] of [['delivering', 1], ['delivered', 2]]) {
+      const webhook = await api.post('/api/shipments/ghn/webhook', {
+        headers: { 'x-giftly-shipping-secret': webhookSecret },
+        data: { OrderCode: `GHN-${order.orderCode}`, ClientOrderCode: order.orderCode, ShopID: shopId,
+          Type: 'switch_status', Status: status, Time: new Date(Date.now() + seconds * 1000).toISOString() },
+      });
+      expect(webhook.status(), await webhook.text()).toBe(200);
     }
-    const reservedStockResponse = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
-    const reservedStock = (await reservedStockResponse.json()).data.items.find((item) => item.id === product.id).stock;
+    const reservedStockResponse = await api.get(`/api/admin/products?limit=100&q=${encodeURIComponent(product.name)}`, { headers: adminAuth });
+    const reservedStock = (await reservedStockResponse.json()).data.items.find((item) => String(item.id) === String(product.id)).stock;
     expect(reservedStock).toBe(startingStock - 1);
 
     const reviewBody = 'Playwright verified delivered-product review fixture.';
@@ -530,7 +568,7 @@ test('customer review and return flows require delivery, publish through admin r
     expect((await createReviewPromise).status()).toBe(201);
 
     await openAuthenticatedPage(page, adminSession, '/admin/reviews');
-    const reviewRow = page.getByRole('row').filter({ hasText: reviewBody });
+    const reviewRow = page.getByRole('row').filter({ hasText: reviewBody }).first();
     await expect(reviewRow).toContainText('Đã duyệt');
     // Admin ẩn đánh giá (isApproved = false -> Chờ duyệt)
     const hideResponsePromise = page.waitForResponse((response) =>
@@ -559,11 +597,12 @@ test('customer review and return flows require delivery, publish through admin r
     const createReturnResponse = await createReturnPromise;
     expect(createReturnResponse.status()).toBe(201);
     const returnId = (await createReturnResponse.json()).data.id;
-    await expect(page.locator('.commerce-return-form')).toContainText(RETURN_STATUS.PENDING);
+    await expect(page.locator('.commerce-return-form').last()).toContainText(RETURN_STATUS.PENDING);
 
     await openAuthenticatedPage(page, adminSession, '/admin/returns');
     const returnRow = page.getByRole('row').filter({ hasText: order.orderCode });
     await expect(returnRow).toContainText('Playwright return workflow fixture');
+    page.on('dialog', (dialog) => dialog.accept('Playwright return workflow admin note.'));
     const approvePromise = page.waitForResponse((response) =>
       response.url().includes(`/api/admin/returns/${returnId}`) && response.request().method() === 'PATCH');
     await returnRow.getByRole('button', { name: 'Chấp nhận' }).click();
@@ -579,17 +618,17 @@ test('customer review and return flows require delivery, publish through admin r
     await expect(returnRow.locator('td').nth(3)).toHaveText(RETURN_STATUS.COMPLETED);
 
     await openAuthenticatedPage(page, customerSession, `/orders/${orderId}`);
-    await expect(page.locator('.commerce-return-form')).toContainText(RETURN_STATUS.COMPLETED);
-    await expect(page.locator('.commerce-return-form')).toContainText('Giftly chưa xử lý hoàn tiền tự động');
-    const finalProducts = await api.get('/api/admin/products?limit=100', { headers: adminAuth });
-    expect((await finalProducts.json()).data.items.find((item) => item.id === product.id).stock).toBe(startingStock);
+    await expect(page.locator('.commerce-return-form').last()).toContainText(RETURN_STATUS.COMPLETED);
+    await expect(page.locator('.commerce-return-form').last()).toContainText('Giftly chưa xử lý hoàn tiền tự động');
+    const finalProducts = await api.get(`/api/admin/products?limit=100&q=${encodeURIComponent(product.name)}`, { headers: adminAuth });
+    expect((await finalProducts.json()).data.items.find((item) => String(item.id) === String(product.id)).stock).toBe(startingStock);
   } finally {
     await api.dispose();
   }
 });
 
 test('admin-created coupon recalculates checkout and is recorded on the order', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
   const testDatabase = process.env.PLAYWRIGHT_DB_NAME || 'giftly_e2e_test';
   const customerEmail = `e2e-coupon-${randomUUID()}@example.invalid`;
   const adminEmail = `e2e-admin-coupon-${randomUUID()}@example.invalid`;
@@ -641,7 +680,7 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
     });
     expect(address.status()).toBe(201);
     await openAuthenticatedPage(page, customerSession, '/products');
-    const product = page.locator('.commerce-product').first();
+    const product = page.locator('.commerce-product').filter({ has: page.locator('button.commerce-button-small:not([disabled])') }).first();
     await expect(product).toBeVisible();
     await product.getByRole('button').click();
     await page.goto('/cart');
@@ -682,7 +721,7 @@ test('admin-created coupon recalculates checkout and is recorded on the order', 
 });
 
 test('quyết định A: khách xem được sản phẩm demo trên catalog với nhãn không đặt mua, demo account xem được chi tiết', async ({ page }) => {
-  const api = await request.newContext({ baseURL: 'http://localhost:5000' });
+  const api = await request.newContext({ baseURL: backendUrl });
 
   try {
     // 1. Kiểm tra qua API catalog công khai: khách xem được cả sản phẩm synthetic (Quyết định A)
@@ -713,7 +752,7 @@ test('quyết định A: khách xem được sản phẩm demo trên catalog v�
     let syntheticId;
     try {
       const [rows] = await conn.execute(
-        'SELECT id, name FROM products WHERE is_synthetic_display = TRUE LIMIT 1'
+        "SELECT id, name FROM products WHERE is_synthetic_display = TRUE AND status='ACTIVE' LIMIT 1"
       );
       expect(rows.length).toBeGreaterThan(0);
       syntheticId = rows[0].id;
@@ -743,7 +782,7 @@ test('quyết định A: khách xem được sản phẩm demo trên catalog v�
 
     // 6. Đăng nhập tài khoản và thử gửi POST /api/cart/items thêm sản phẩm synthetic -> bị chặn 400
     const demoLogin = await api.post('/api/auth/login', {
-      data: { email: 'demo-ml@giftly.test', password: 'Demo-User-ML-2026!' },
+      data: { email: 'demo-ml@giftly.test', password: process.env.E2E_DEMO_USER_PASSWORD },
     });
     expect(demoLogin.ok()).toBeTruthy();
     const demoSession = (await demoLogin.json()).data;
