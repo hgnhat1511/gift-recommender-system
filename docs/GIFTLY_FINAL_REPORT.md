@@ -16,7 +16,7 @@ Ngày ghi nhận: 2026-11-11. Báo cáo này chỉ ghi kết quả có log trong
 | ML health | Đã chạy | `curl http://localhost:18000/health` | `status=healthy`, `modelVersion=LC-1`, SHA-256 `1d11488782894eae3b4eb142943303f4c9e85d0784f800047396d4f444eea8ff`, `totalUsersLoaded=7441`, `candidatePoolSize=30376` |
 | Tài khoản REES46 demo | Đã chạy | Đăng nhập qua backend container và gọi `/api/products/recommendations?limit=8` | Đăng nhập thành công; `source=ranker_lc1`; trả 8 items |
 | Frontend qua Docker | Đã chạy | `curl http://localhost:13000` | HTTP 200 |
-| Backend full suite | Chưa làm trong giai đoạn 7 | Không chạy lại | Chưa đo |
+| Backend full suite | Đã chạy trên `giftly_e2e_test` | `node --test --test-reporter=spec --test-concurrency=1` với `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test` | 141 tests, 141 pass, 0 fail, 0 skipped; duration 37299.1906 ms |
 | Production / merchant thật | Chưa làm | Không áp dụng | VNPAY/GHN sandbox/local; chưa xác minh giao dịch thật |
 
 ## Compose và dữ liệu
@@ -25,9 +25,10 @@ Stack được khởi chạy bằng project riêng `giftly_clean`, các cổng h
 
 Một lượt importer chạy từ host ban đầu đã kết nối nhầm MySQL ở cổng 3306, nhưng biến DB vẫn là `giftly_e2e_test`; output ghi nhận thêm 3 user demo, không thêm sản phẩm. Dữ liệu không bị xóa. Lượt chạy sau chỉ rõ `DB_HOST=127.0.0.1`, `DB_PORT=13306`, `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, và chạy vào DB của project cô lập: thêm 188 sản phẩm REES46 và 3 tài khoản demo; tổng catalog khi đó là 202 sản phẩm (14 seed + 188 REES46), 3 user. Theo log thao tác, không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`.
 
+Backend suite lần đầu chạy khi DB chưa có fixture demo, kết quả 135 pass và 6 fail (hai test nhóm Gift Finder và bốn assertion về catalog/giao dịch mô phỏng). Sau đó `node scripts/resetTestDb.js giftly_e2e_test --seed-demo` dựng lại fixture từ các file đã commit: 1.000 sản phẩm demo, rule_v1 tags, 2.000 đơn mô phỏng và hơn 20.000 sự kiện. Chạy lại cùng lệnh suite đạt 141/141, không sửa test hoặc assertion. Các test tích hợp tự reset chỉ `giftly_e2e_test`; log của các file tích hợp xác nhận `SELECT DATABASE(): giftly_e2e_test`.
+
 ## Giới hạn và việc chưa đo
 
-- Backend suite chưa chạy lại trong giai đoạn 7; không kết luận pass/fail từ các số liệu cũ.
 - Docker được xác minh trên máy phát triển, không phải production. Cần cấu hình secret và cổng riêng trước khi chạy ở môi trường khác.
 - VNPAY và GHN chưa được xác minh với merchant production; kết quả local/sandbox không chứng minh thanh toán hoặc webhook ngoài thực tế.
 - Build frontend thành công nhưng cảnh báo bundle 515.68 kB chưa được xử lý.

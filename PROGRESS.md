@@ -311,7 +311,7 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 ## Trạng thái kiểm thử thực tế hiện tại — snapshot 2026-11-11
 
-- **Backend suite:** chưa chạy lại trong giai đoạn 7; kết quả backend đầy đủ ở giai đoạn trước không được suy diễn thành kết quả hiện tại.
+- **Backend suite:** `node --test --test-reporter=spec --test-concurrency=1` sau khi dựng fixture bằng `node scripts/resetTestDb.js giftly_e2e_test --seed-demo`: 141 pass, 0 fail, 0 skipped.
 - **Frontend unit (`npm.cmd test`):** 24 pass, 0 fail (giai đoạn 6).
 - **Frontend lint/build:** cả hai thành công (giai đoạn 6); build có cảnh báo chunk JavaScript 515.68 kB, vượt mức khuyến nghị 500 kB.
 - **Playwright E2E:** 28 passed (giai đoạn 6, backend và DB `giftly_e2e_test`).
@@ -322,10 +322,10 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 - Giai đoạn 6: E2E Playwright 28 passed; frontend unit 24 pass, lint và build thành công.
 - Giai đoạn 7: Docker Compose đủ 5 dịch vụ đã lên healthy trên project/volume riêng. Migration 000–014 và `seed:demo` chạy trong MySQL cô lập. Health ML thành công; đăng nhập tài khoản demo REES46 và gọi gợi ý xác nhận `source=ranker_lc1`, 8 kết quả; frontend trả HTTP 200. Chạy `down` không kèm `-v`, volume được giữ.
+- Backend suite sau đó chạy lại trên `giftly_e2e_test`: lần đầu 135 pass, 6 fail vì catalog/tag và dữ liệu mô phỏng chưa được nạp; sau khi dựng fixture bằng `resetTestDb.js --seed-demo`, lần chạy đầy đủ đạt 141 pass, 0 fail, 0 skipped. Không sửa test/assertion. Output cuối: `ℹ tests 141`, `ℹ pass 141`, `ℹ fail 0`, `ℹ skipped 0`, `ℹ duration_ms 37299.1906`.
 - Sự cố thao tác được ghi nhận: một lượt chạy importer từ máy host trỏ nhầm vào MySQL trên cổng 3306 nhưng vẫn dùng đúng DB `giftly_e2e_test`; output khi đó thêm 3 user demo, không thêm sản phẩm. Không xóa dữ liệu theo yêu cầu. Sau đó importer được chạy lại với `DB_HOST=127.0.0.1`, `DB_PORT=13306` trên DB cô lập `giftly_e2e_test` của project `giftly_clean`: thêm 188 sản phẩm và 3 user demo (tổng 202 sản phẩm gồm 14 seed + 188 REES46; 3 user). Không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`.
 
 ## Còn lại / chưa xác minh
 
-- Backend suite chưa được chạy lại trong giai đoạn 7.
 - Kết quả Docker là local demo với cấu hình secrets/ports tạm thời; chưa xác minh triển khai production hoặc kết nối merchant thật của VNPAY/GHN.
 - Cảnh báo kích thước bundle frontend 515.68 kB chưa được tối ưu.
