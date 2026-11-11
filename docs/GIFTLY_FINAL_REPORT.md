@@ -7,9 +7,9 @@ Ngày ghi nhận: 2026-11-11. Báo cáo này chỉ ghi kết quả có log trong
 | Hạng mục | Mức xác minh | Lệnh / thao tác | Output ghi nhận |
 |---|---|---|---|
 | Frontend unit | Đã chạy, giai đoạn 6 | `npm.cmd test` trong `core-frontend` | 24 pass, 0 fail |
-| Frontend lint | Đã chạy, giai đoạn 6 | `npm.cmd run lint` trong `core-frontend` | Thành công, không có lỗi lint |
-| Frontend build | Đã chạy, giai đoạn 6 | `npm.cmd run build` trong `core-frontend` | Thành công; cảnh báo chunk JavaScript 515.68 kB vượt mức khuyến nghị 500 kB |
-| Playwright E2E | Đã chạy, giai đoạn 6 | Playwright trên backend và DB `giftly_e2e_test` | 28 passed (1.1m) |
+| Frontend lint | Đã chạy lại sau khi tách tải trang | `npm.cmd run lint` trong `core-frontend` | Thành công, không có lỗi lint |
+| Frontend build | Đã chạy lại sau khi tách tải trang | `npm.cmd run build` trong `core-frontend` | Thành công; entry chunk 287.50 kB, không còn cảnh báo chunk trên 500 kB |
+| Playwright E2E | Đã chạy lại | `npm.cmd run test:e2e` với backend cổng 5101, frontend cổng 5178 và DB `giftly_e2e_test` | 28 passed (1.6m) |
 | Cấu hình Compose | Đã chạy | `docker compose -p giftly_clean config --quiet` với biến môi trường test | Exit code 0 |
 | Docker services | Đã chạy | `docker compose -p giftly_clean ps` | 5 dịch vụ healthy/running: MySQL, Redis, ML, backend, frontend |
 | Migration + seed | Đã chạy trên DB test cô lập | `docker compose -p giftly_clean exec -T core-backend npm run migrate`; `npm run seed:demo` | Migration 000–014 applied; seed: 5 categories, 14 products |
@@ -27,9 +27,10 @@ Một lượt importer chạy từ host ban đầu đã kết nối nhầm MySQL
 
 Backend suite lần đầu chạy khi DB chưa có fixture demo, kết quả 135 pass và 6 fail (hai test nhóm Gift Finder và bốn assertion về catalog/giao dịch mô phỏng). Sau đó `node scripts/resetTestDb.js giftly_e2e_test --seed-demo` dựng lại fixture từ các file đã commit: 1.000 sản phẩm demo, rule_v1 tags, 2.000 đơn mô phỏng và hơn 20.000 sự kiện. Chạy lại cùng lệnh suite đạt 141/141, không sửa test hoặc assertion. Các test tích hợp tự reset chỉ `giftly_e2e_test`; log của các file tích hợp xác nhận `SELECT DATABASE(): giftly_e2e_test`.
 
+Frontend sau đó được cập nhật để tải trang theo route. `npm.cmd run lint` thành công; `npm.cmd run build` tạo entry chunk 287.50 kB và không cảnh báo chunk lớn. `npm.cmd run test:e2e` chạy 28/28 thành công trên backend thật, gồm visual audit 6 viewport và luồng storefront, shipper, GHN, VNPAY, tồn kho, coupon, review/đổi trả.
+
 ## Giới hạn và việc chưa đo
 
 - Docker được xác minh trên máy phát triển, không phải production. Cần cấu hình secret và cổng riêng trước khi chạy ở môi trường khác.
 - VNPAY và GHN chưa được xác minh với merchant production; kết quả local/sandbox không chứng minh thanh toán hoặc webhook ngoài thực tế.
-- Build frontend thành công nhưng cảnh báo bundle 515.68 kB chưa được xử lý.
 - Không có log raw đính kèm dưới dạng file riêng trong repository; các dòng kết quả trên được chép từ output công cụ của phiên xác minh.

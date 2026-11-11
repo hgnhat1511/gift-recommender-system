@@ -313,8 +313,8 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 - **Backend suite:** `node --test --test-reporter=spec --test-concurrency=1` sau khi dựng fixture bằng `node scripts/resetTestDb.js giftly_e2e_test --seed-demo`: 141 pass, 0 fail, 0 skipped.
 - **Frontend unit (`npm.cmd test`):** 24 pass, 0 fail (giai đoạn 6).
-- **Frontend lint/build:** cả hai thành công (giai đoạn 6); build có cảnh báo chunk JavaScript 515.68 kB, vượt mức khuyến nghị 500 kB.
-- **Playwright E2E:** 28 passed (giai đoạn 6, backend và DB `giftly_e2e_test`).
+- **Frontend lint/build:** lint thành công; build thành công sau khi tách tải trang theo route, entry chunk 287.50 kB và không còn cảnh báo chunk trên 500 kB.
+- **Playwright E2E:** 28 passed; lần chạy hiện tại trên backend thật và DB `giftly_e2e_test` hoàn tất trong 1.6 phút.
 - **Docker giai đoạn 7:** project `giftly_clean`, 5 dịch vụ healthy trước khi dừng; migration 000–014 và seed demo thành công trên volume mới, DB tên `giftly_e2e_test`. Đăng nhập demo REES46 thành công; endpoint gợi ý trả `source=ranker_lc1` với 8 sản phẩm; ML `/health` healthy; frontend HTTP 200. Đã dừng bằng `docker compose -p giftly_clean down`, volume giữ nguyên.
 - **Phạm vi tài liệu:** các số trên chỉ áp dụng cho log của lần chạy được nêu. Các kiểm thử lịch sử khác cần chạy lại nếu cần xác nhận trạng thái hiện tại.
 
@@ -328,4 +328,4 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 ## Còn lại / chưa xác minh
 
 - Kết quả Docker là local demo với cấu hình secrets/ports tạm thời; chưa xác minh triển khai production hoặc kết nối merchant thật của VNPAY/GHN.
-- Cảnh báo kích thước bundle frontend 515.68 kB chưa được tối ưu.
+- Các kết quả xác minh không bao gồm triển khai production hoặc giao dịch VNPAY/GHN với merchant thật.

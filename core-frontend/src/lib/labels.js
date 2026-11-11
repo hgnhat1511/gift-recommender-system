@@ -22,6 +22,10 @@ export const ORDER_STATUS = Object.freeze({
   CANCELLED: 'Đã hủy',
 });
 
+export const APP_LABEL = Object.freeze({
+  PAGE_LOADING: 'Đang tải trang…',
+});
+
 export const ORDER_RECEIPT_LABEL = Object.freeze({
   TITLE: 'Xác nhận nhận hàng',
   CONFIRMED: 'Bạn đã xác nhận nhận hàng',

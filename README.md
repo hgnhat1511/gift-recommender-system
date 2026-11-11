@@ -160,9 +160,9 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 
 ## Kiểm tra đã thực hiện
 
-Snapshot xác minh giai đoạn 6–7 ngày 2026-11-11: backend suite 141 pass/0 fail/0 skipped khi khởi tạo DB bằng `resetTestDb.js --seed-demo`; frontend unit test 24 pass/0 fail; lint và build thành công; Playwright 28 pass. Docker Compose project `giftly_clean` đã chạy đủ 5 dịch vụ healthy trên MySQL volume mới với `DB_NAME=giftly_e2e_test`; migration 000–014 và seed demo thành công. Đăng nhập tài khoản demo REES46 qua backend trả gợi ý với `source=ranker_lc1` (8 sản phẩm); ML `/health` healthy; frontend trả HTTP 200. Sau kiểm tra đã chạy `docker compose -p giftly_clean down` (không `-v`), nên volume còn nguyên.
+Snapshot xác minh ngày 2026-11-11: backend suite 141 pass/0 fail/0 skipped với fixture `resetTestDb.js --seed-demo`; frontend unit test 24 pass/0 fail; lint thành công; build thành công với entry chunk 287.50 kB; Playwright 28 passed. Docker Compose project `giftly_clean` đã chạy đủ 5 dịch vụ healthy trên MySQL volume mới với `DB_NAME=giftly_e2e_test`; migration 000–014 và seed demo thành công. Đăng nhập tài khoản demo REES46 qua backend trả gợi ý với `source=ranker_lc1` (8 sản phẩm); ML `/health` healthy; frontend trả HTTP 200. Sau kiểm tra đã chạy `docker compose -p giftly_clean down` (không `-v`), nên volume còn nguyên.
 
-Lượt backend đầu tiên khi chưa nạp fixture demo có test đỏ; chạy lại sau khi nạp fixture bằng `--seed-demo` đạt kết quả nêu trên, không sửa assertion. Build frontend có cảnh báo bundle JavaScript 515.68 kB vượt ngưỡng khuyến nghị 500 kB; build vẫn thành công.
+Lượt backend đầu tiên khi chưa nạp fixture demo có test đỏ; chạy lại sau khi nạp fixture bằng `--seed-demo` đạt kết quả nêu trên, không sửa assertion. Các trang tải theo route để giảm JavaScript ban đầu; build hiện không còn cảnh báo chunk vượt ngưỡng 500 kB.
 
 ## Giới hạn đã biết
 
