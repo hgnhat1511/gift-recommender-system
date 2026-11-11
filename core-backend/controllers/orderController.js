@@ -185,8 +185,8 @@ function positiveDays(name, fallback) {
     const value = Number(process.env[name]);
     return Number.isInteger(value) && value >= 1 && value <= 365 ? value : fallback;
 }
-const autoReceiveDays = positiveDays('ORDER_AUTO_RECEIVE_DAYS', 7);
 const returnWindowDays = positiveDays('RETURN_WINDOW_DAYS', 7);
+const autoReceiveDays = returnWindowDays;
 const orderSelect = `SELECT o.*, DATE_ADD(o.delivered_at, INTERVAL ${autoReceiveDays} DAY) auto_received_at,
     DATE_ADD(o.delivered_at, INTERVAL ${returnWindowDays} DAY) return_deadline,
     (SELECT s.provider FROM shipments s WHERE s.order_id=o.id LIMIT 1) delivery_source,
