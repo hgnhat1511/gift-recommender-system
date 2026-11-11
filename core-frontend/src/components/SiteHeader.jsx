@@ -26,6 +26,7 @@ export function SiteHeader() {
   const location = useLocation();
   const auth = getAuth();
   const isAdmin = auth?.user?.role === 'ADMIN';
+  const isShipper = auth?.user?.role === 'SHIPPER';
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -154,6 +155,12 @@ export function SiteHeader() {
                 <Link to="/admin" className="site-action-item site-admin-action" title="Quản trị">
                   <ShieldCheck size={21} aria-hidden="true" />
                   <span>Quản trị</span>
+                </Link>
+              )}
+              {isShipper && (
+                <Link to="/shipper" className="site-action-item site-admin-action" title="Đơn giao hàng">
+                  <Truck size={21} aria-hidden="true" />
+                  <span>Giao hàng</span>
                 </Link>
               )}
 

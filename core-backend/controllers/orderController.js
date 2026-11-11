@@ -127,7 +127,7 @@ async function create(req, res, next) {
             VALUES (?,?,?,?,?,?, 'UNPAID',?,?,?,?,?,?,?,?,?,?)`,
             [orderCode,requestKey,req.user.id,initialStatus,paymentMethod,totals.shippingMethod,address.recipient_name,address.phone,JSON.stringify({ addressLine:address.address_line,ward:address.ward,district:address.district,city:address.city,isNewAdministrativeAddress:Boolean(address.is_new_administrative_address) }),note,totals.coupon?.code || null,amount(totals.subtotalCents),amount(totals.discountCents),amount(totals.shippingCents),amount(totals.totalCents), isSimulated ? 1 : 0]);
         const orderId = created.insertId;
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note) VALUES (?,?,?,?)', [orderId,req.user.id,initialStatus,'Khách đặt hàng']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,to_status,note,source) VALUES (?,?,?,?,\'CUSTOMER\')', [orderId,req.user.id,initialStatus,'Khách đặt hàng']);
         const sortedItems = [...totals.items].sort((a, b) => Number(a.product_id) - Number(b.product_id));
         for (const item of sortedItems) {
             const [updated] = await connection.execute("UPDATE products SET stock=stock-? WHERE id=? AND status='ACTIVE' AND (is_synthetic_display = FALSE OR is_synthetic_display IS NULL) AND stock>=?", [item.quantity,item.product_id,item.quantity]);
@@ -165,7 +165,7 @@ async function create(req, res, next) {
         if (paymentMethod === 'COD') {
             finalStatus = 'PROCESSING';
             await connection.execute("UPDATE orders SET status='PROCESSING' WHERE id=?", [orderId]);
-            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,'CONFIRMED','PROCESSING','Đã giữ hàng, tự động chuyển sang chuẩn bị hàng')", [orderId]);
+            await connection.execute("INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note,source) VALUES (?,NULL,'CONFIRMED','PROCESSING','Đã giữ hàng, tự động chuyển sang chuẩn bị hàng','SYSTEM')", [orderId]);
         }
         await connection.execute('DELETE FROM cart_items WHERE user_id=? AND is_selected=1', [req.user.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đặt hàng thành công',?,?)", [req.user.id,`Đơn ${orderCode} đã được ghi nhận. Phương thức thanh toán: ${paymentMethod}.`,orderId]);
@@ -189,6 +189,8 @@ const autoReceiveDays = positiveDays('ORDER_AUTO_RECEIVE_DAYS', 7);
 const returnWindowDays = positiveDays('RETURN_WINDOW_DAYS', 7);
 const orderSelect = `SELECT o.*, DATE_ADD(o.delivered_at, INTERVAL ${autoReceiveDays} DAY) auto_received_at,
     DATE_ADD(o.delivered_at, INTERVAL ${returnWindowDays} DAY) return_deadline,
+    (SELECT s.provider FROM shipments s WHERE s.order_id=o.id LIMIT 1) delivery_source,
+    (SELECT u.full_name FROM users u WHERE u.id=o.shipper_user_id LIMIT 1) shipper_name,
     (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) item_count FROM orders o`;
 
 const activeReorders = new Map();
@@ -277,6 +279,7 @@ function orderView(row, items, history, shippingHistory) {
     return { id:String(row.id),orderCode:row.order_code,status:row.status,paymentMethod:row.payment_method,shippingMethod:row.shipping_method||'STANDARD',paymentStatus:row.payment_status,
         recipientName:row.recipient_name,phone:row.phone,shippingAddress:row.shipping_address,customerNote:row.customer_note,couponCode:row.coupon_code,
         shippingCarrier:row.shipping_carrier||null,trackingNumber:row.tracking_number||null,
+        deliverySource:row.delivery_source||null,shipperUserId:row.shipper_user_id==null?null:String(row.shipper_user_id),shipperName:row.shipper_name||null,
         subtotal:Number(row.subtotal),discount:Number(row.discount_amount),shippingFee:Number(row.shipping_fee),total:Number(row.total_amount),
         deliveredAt,receivedConfirmedAt:row.received_confirmed_at||null,receivedAt:receiptAt,
         canConfirmReceived:row.status==='DELIVERED'&&Boolean(deliveredAt)&&!row.received_confirmed_at&&!automaticallyReceived,
@@ -288,7 +291,7 @@ async function getOrderData(connection, orderId, whereClause, params) {
     const [orders]=await connection.execute(`${orderSelect} WHERE ${whereClause} LIMIT 1`,params);
     if(!orders[0])return null;
     const [items]=await connection.execute('SELECT id,product_id,product_name,image_url,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id',[orderId]);
-    const [history]=await connection.execute('SELECT from_status,to_status,note,created_at FROM order_status_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
+    const [history]=await connection.execute('SELECT h.from_status,h.to_status,h.note,h.source,h.changed_by,u.full_name changed_by_name,h.created_at FROM order_status_history h LEFT JOIN users u ON u.id=h.changed_by WHERE h.order_id=? ORDER BY h.created_at,h.id',[orderId]);
     const [shippingHistory]=await connection.execute('SELECT carrier,tracking_number,note,created_at FROM order_shipping_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
     const [shipmentEvents]=await connection.execute(`SELECT s.provider,s.tracking_number,e.provider_status,e.normalized_status,
         DATE_FORMAT(e.occurred_at,'%Y-%m-%dT%H:%i:%sZ') occurred_at
@@ -354,7 +357,7 @@ async function cancelMine(req,res,next){
         }
         await restoreStock(connection,order.id,req.user.id);
         await connection.execute("UPDATE orders SET status='CANCELLED' WHERE id=?",[order.id]);
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,check.fromStatus,'CANCELLED','Khách hủy đơn']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note,source) VALUES (?,?,?,?,?,\'CUSTOMER\')',[order.id,req.user.id,check.fromStatus,'CANCELLED','Khách hủy đơn']);
         await releaseCoupon(connection,order.id);
         await connection.execute("UPDATE payment_attempts SET status='EXPIRED' WHERE order_id=? AND status='PENDING'",[order.id]);
         await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'ORDER','Đơn hàng đã hủy',?,?)",[req.user.id,`Đơn ${order.order_code} đã được hủy.`,order.id]);

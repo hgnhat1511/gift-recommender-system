@@ -13,6 +13,8 @@ const adminRoutes = require('./routes/adminRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
+const shipperRoutes = require('./routes/shipperRoutes');
+const deliveryProofRoutes = require('./routes/deliveryProofRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,6 +32,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/shipments', shipmentRoutes);
+app.use('/api/shipper', shipperRoutes);
+app.use('/api/delivery-proofs', deliveryProofRoutes);
 
 // Kiem tra Backend
 app.get('/', (req, res) => {
@@ -91,6 +95,9 @@ app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     if (error.type === 'entity.parse.failed') {
         return res.status(400).json({ success: false, message: 'Invalid JSON request body' });
+    }
+    if (error.type === 'entity.too.large') {
+        return res.status(413).json({ success: false, message: 'Request body exceeds the allowed size.' });
     }
     console.error('Request failed:', error.code || error.name || 'unexpected error');
     return res.status(500).json({ success: false, message: 'Internal server error' });

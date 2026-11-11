@@ -85,7 +85,37 @@ export const USER_ROLE = Object.freeze({
   USER: 'Khách hàng',
   CUSTOMER: 'Khách hàng',
   STAFF: 'Nhân viên',
+  SHIPPER: 'Nhân viên giao hàng',
   ADMIN: 'Quản trị viên',
+});
+
+export const SHIPPER_LABEL = Object.freeze({
+  PAGE_TITLE: 'Đơn giao hàng',
+  PAGE_DESCRIPTION: 'Xem các đơn được phân công và cập nhật tiến trình giao hàng.',
+  EMPTY_TITLE: 'Chưa có đơn được phân công',
+  EMPTY_DESCRIPTION: 'Đơn nội bộ sẽ xuất hiện sau khi quản trị viên phân công.',
+  REFRESH: 'Làm mới',
+  START_DELIVERY: 'Bắt đầu giao',
+  CONFIRM_DELIVERED: 'Xác nhận giao thành công',
+  LOADING: 'Đang tải đơn giao hàng…',
+  COD_NOTE: 'Thu hộ khi giao',
+  ONLINE_PAID_NOTE: 'Đã thanh toán online',
+  INTERNAL_TRACKING: 'Mã giao nội bộ',
+  PROOF_PHOTO: 'Ảnh giao hàng',
+  PHOTO_OPTIONAL: 'Không bắt buộc · JPEG, PNG hoặc WebP · tối đa 3 MB',
+});
+
+export const DELIVERY_SOURCE = Object.freeze({
+  GHN: 'GHN',
+  INTERNAL: 'Nội bộ',
+});
+
+export const ORDER_HISTORY_SOURCE = Object.freeze({
+  ADMIN: 'Quản trị viên',
+  CUSTOMER: 'Khách hàng',
+  GHN: 'Webhook GHN',
+  INTERNAL: 'Shipper nội bộ',
+  SYSTEM: 'Hệ thống',
 });
 
 export const PRODUCT_STATUS = Object.freeze({

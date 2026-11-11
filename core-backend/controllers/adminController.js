@@ -245,7 +245,10 @@ async function listOrders(req,res,next){
         if(req.query.from){where.push('o.created_at>=?');params.push(`${req.query.from} 00:00:00`)}
         if(req.query.to){where.push('o.created_at<=?');params.push(`${req.query.to} 23:59:59`)}
         const clause=where.length?`WHERE ${where.join(' AND ')}`:'';
-        const [rows]=await pool.execute(`SELECT o.*,COUNT(oi.id) item_count,u.email customer_email FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN order_items oi ON oi.order_id=o.id ${clause} GROUP BY o.id ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,[...params,limit,(page-1)*limit]);
+        const [rows]=await pool.execute(`SELECT o.*,(SELECT s.provider FROM shipments s WHERE s.order_id=o.id LIMIT 1) delivery_source,
+            (SELECT su.full_name FROM users su WHERE su.id=o.shipper_user_id LIMIT 1) shipper_name,
+            COUNT(oi.id) item_count,u.email customer_email FROM orders o JOIN users u ON u.id=o.user_id
+            LEFT JOIN order_items oi ON oi.order_id=o.id ${clause} GROUP BY o.id ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,[...params,limit,(page-1)*limit]);
         const [[count]]=await pool.execute(`SELECT COUNT(*) total FROM orders o JOIN users u ON u.id=o.user_id ${clause}`,params);
         return res.json({success:true,data:{items:rows.map((r)=>({...orderView(r),customerEmail:r.customer_email})),pagination:{page,limit,total:Number(count.total),pages:Math.ceil(Number(count.total)/limit)}}});
     }catch(error){return next(error)}
@@ -312,34 +315,15 @@ async function updateOrderStatus(req,res,next){
             await connection.execute("UPDATE payment_attempts SET status='EXPIRED' WHERE order_id=? AND status='PENDING'",[order.id]);
         }
         await connection.execute('UPDATE orders SET status=?,payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[status,status,order.id]);
-        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,order.status,status,note?.trim()||'Quản trị viên cập nhật trạng thái']);
+        await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note,source) VALUES (?,?,?,?,?,\'ADMIN\')',[order.id,req.user.id,order.status,status,note?.trim()||'Quản trị viên cập nhật trạng thái']);
         await connection.execute('INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (? ,\'ORDER\',?,?,?)',[order.user_id,`Cập nhật đơn ${order.order_code}`,`Trạng thái đơn hàng: ${getOrderStatusLabel(status)}.`,order.id]);
         await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'ORDER_STATUS','order',order.id,JSON.stringify({from:order.status,to:status,note:note||null})]);
         await connection.commit();return res.json({success:true,data:{orderCode:order.order_code,status,paymentStatus:status==='DELIVERED'&&order.payment_method==='COD'?'PAID':order.payment_status}});
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
 
-async function updateShipping(req,res,next){
-    const {carrier,trackingNumber,note}=req.body||{};
-    if(!validId(req.params.id)||typeof carrier!=='string'||carrier.trim().length<2||carrier.trim().length>100||
-        typeof trackingNumber!=='string'||trackingNumber.trim().length<3||trackingNumber.trim().length>100||
-        (note!=null&&(typeof note!=='string'||note.length>300)))return res.status(400).json({success:false,message:'Provide a carrier, tracking number and optional note.'});
-    const connection=await pool.getConnection();
-    try{
-        await connection.beginTransaction();
-        const [rows]=await connection.execute('SELECT id,user_id,order_code,status,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[req.params.id]);
-        const order=rows[0];
-        if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(!['PROCESSING','SHIPPED'].includes(order.status)){await connection.rollback();return res.status(409).json({success:false,message:'Shipping details can be recorded only while an order is being prepared or shipped.'})}
-        const cleanCarrier=carrier.trim(),cleanTracking=trackingNumber.trim();
-        if(order.shipping_carrier===cleanCarrier&&order.tracking_number===cleanTracking){await connection.commit();return res.json({success:true,data:{carrier:cleanCarrier,trackingNumber:cleanTracking,unchanged:true}})}
-        await connection.execute('UPDATE orders SET shipping_carrier=?,tracking_number=? WHERE id=?',[cleanCarrier,cleanTracking,order.id]);
-        await connection.execute('INSERT INTO order_shipping_history (order_id,changed_by,carrier,tracking_number,note) VALUES (?,?,?,?,?)',[order.id,req.user.id,cleanCarrier,cleanTracking,note?.trim()||null]);
-        await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'SHIPPING','Thông tin giao hàng đã cập nhật',?,?)",[order.user_id,`Đơn ${order.order_code}: ${cleanCarrier} · mã ${cleanTracking}.`,order.id]);
-        await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'ORDER_SHIPPING','order',order.id,JSON.stringify({carrier:cleanCarrier,trackingNumber:cleanTracking,note:note?.trim()||null})]);
-        await connection.commit();
-        return res.json({success:true,data:{carrier:cleanCarrier,trackingNumber:cleanTracking,unchanged:false}});
-    }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
+async function updateShipping(req,res){
+    return res.status(409).json({success:false,message:'Choose one delivery source: assign an internal shipper or create a GHN shipment.'});
 }
 
 async function listCustomers(req,res,next){
@@ -355,14 +339,37 @@ async function listCustomers(req,res,next){
 
 async function setCustomerStatus(req,res,next){
     const status=req.body?.status;if(!['ACTIVE','LOCKED'].includes(status))return res.status(400).json({success:false,message:'Status must be ACTIVE or LOCKED.'});
-    try{const [result]=await pool.execute('UPDATE users SET status=? WHERE id=? AND role<>\'ADMIN\'',[status,req.params.id]);if(!result.affectedRows)return res.status(404).json({success:false,message:'Customer not found or cannot be changed here.'});await audit(req.user.id,'CUSTOMER_STATUS','user',req.params.id,{status});return res.json({success:true})}catch(error){return next(error)}
+    const connection=await pool.getConnection();
+    try{
+        await connection.beginTransaction();
+        const [[user]]=await connection.execute('SELECT id,role FROM users WHERE id=? AND role<>\'ADMIN\' FOR UPDATE',[req.params.id]);
+        if(!user){await connection.rollback();return res.status(404).json({success:false,message:'Customer not found or cannot be changed here.'})}
+        if(status==='LOCKED'&&user.role==='SHIPPER'){
+            const [[active]]=await connection.execute("SELECT COUNT(*) total FROM orders WHERE shipper_user_id=? AND status IN ('PROCESSING','SHIPPED')",[user.id]);
+            if(Number(active.total)>0){await connection.rollback();return res.status(409).json({success:false,message:'Reassign this shipper’s active deliveries before locking the account.'})}
+        }
+        await connection.execute('UPDATE users SET status=? WHERE id=?',[status,user.id]);
+        await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'CUSTOMER_STATUS','user',user.id,JSON.stringify({status})]);
+        await connection.commit();return res.json({success:true});
+    }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
+}
+
+async function listShippers(req,res,next){
+    try{
+        const [rows]=await pool.execute("SELECT id,full_name,email,phone FROM users WHERE role='SHIPPER' AND status='ACTIVE' ORDER BY full_name,id LIMIT 200");
+        return res.json({success:true,data:rows.map((row)=>({id:String(row.id),fullName:row.full_name,email:row.email,phone:row.phone}))});
+    }catch(error){return next(error)}
 }
 
 async function setUserRole(req,res,next){
-    const role=req.body?.role;if(!['USER','STAFF','ADMIN'].includes(role))return res.status(400).json({success:false,message:'Invalid role.'});
+    const role=req.body?.role;if(!['USER','STAFF','ADMIN','SHIPPER'].includes(role))return res.status(400).json({success:false,message:'Invalid role.'});
     const connection=await pool.getConnection();
     try{await connection.beginTransaction();const [rows]=await connection.execute('SELECT id,role,status FROM users WHERE id=? FOR UPDATE',[req.params.id]);if(!rows[0]){await connection.rollback();return res.status(404).json({success:false,message:'User not found.'})}
         if(rows[0].role==='ADMIN'&&role!=='ADMIN'&&rows[0].status==='ACTIVE'){const [admins]=await connection.query("SELECT id FROM users WHERE role='ADMIN' AND status='ACTIVE' FOR UPDATE");if(admins.length<=1){await connection.rollback();return res.status(409).json({success:false,message:'Cannot demote the last active administrator.'})}}
+        if(rows[0].role==='SHIPPER'&&role!=='SHIPPER'){
+            const [[active]]=await connection.execute("SELECT COUNT(*) total FROM orders WHERE shipper_user_id=? AND status IN ('PROCESSING','SHIPPED')",[rows[0].id]);
+            if(Number(active.total)>0){await connection.rollback();return res.status(409).json({success:false,message:'Reassign this shipper’s active deliveries before changing the role.'})}
+        }
         await connection.execute('UPDATE users SET role=? WHERE id=?',[role,req.params.id]);await connection.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,CAST(? AS JSON))',[req.user.id,'USER_ROLE','user',req.params.id,JSON.stringify({role})]);await connection.commit();return res.json({success:true})
     }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
@@ -505,4 +512,4 @@ async function listReviews(req,res,next){try{const [rows]=await pool.query(`SELE
 async function moderateReview(req,res,next){const isApproved=req.body?.isApproved;if(typeof isApproved!=='boolean')return res.status(400).json({success:false,message:'isApproved must be boolean.'});try{const [result]=await pool.execute('UPDATE reviews SET is_approved=? WHERE id=?',[isApproved,req.params.id]);if(!result.affectedRows)return res.status(404).json({success:false,message:'Review not found.'});await audit(req.user.id,'REVIEW_MODERATE','review',req.params.id,{isApproved});return res.json({success:true})}catch(error){return next(error)}}
 
 async function audit(adminId,action,type,id,details){await pool.execute('INSERT INTO admin_audit_logs (admin_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)',[adminId,action,type,id,details?JSON.stringify(details):null])}
-module.exports={dashboard,listProducts,createProduct,updateProduct,archiveProduct,adjustInventory,listInventory,listCategories,saveCategory,archiveCategory,listBanners,createBanner,updateBanner,archiveBanner,listOrders,adminOrderDetail,updateOrderStatus,updateShipping,listCustomers,setCustomerStatus,setUserRole,listDeletionRequests,reviewDeletionRequest,listCoupons,saveCoupon,archiveCoupon,listReturns,updateReturn,listReviews,moderateReview};
+module.exports={dashboard,listProducts,createProduct,updateProduct,archiveProduct,adjustInventory,listInventory,listCategories,saveCategory,archiveCategory,listBanners,createBanner,updateBanner,archiveBanner,listOrders,listShippers,adminOrderDetail,updateOrderStatus,updateShipping,listCustomers,setCustomerStatus,setUserRole,listDeletionRequests,reviewDeletionRequest,listCoupons,saveCoupon,archiveCoupon,listReturns,updateReturn,listReviews,moderateReview};

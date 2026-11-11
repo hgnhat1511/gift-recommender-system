@@ -12,7 +12,8 @@ import { CartPage, CheckoutPage, OrdersPage, OrderDetailPage } from './pages/sto
 import { AccountPage, FavoritesPage } from './pages/account/AccountPages.jsx';
 import { AdminLayout, AdminDashboard, AdminProducts, AdminInventory, AdminCategories, AdminBanners, AdminOrders, AdminCustomers, AdminDeletionRequests, AdminReturns, AdminReviews } from './pages/admin/AdminPages.jsx';
 import CouponAdminPage from './pages/admin/CouponAdminPage.jsx';
-import { StoreLayout, RequireUser, RequireAdmin } from './layouts/StoreLayout.jsx';
+import { StoreLayout, RequireUser, RequireAdmin, RequireShipper } from './layouts/StoreLayout.jsx';
+import ShipperPage from './pages/shipper/ShipperPage.jsx';
 import { CartProvider } from './context/CartContext.jsx';
 
 import "./index.css";
@@ -35,6 +36,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/account" element={<AccountPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
           </Route>
+        </Route>
+        <Route element={<StoreLayout />}>
+          <Route element={<RequireShipper />}><Route path="/shipper" element={<ShipperPage />} /></Route>
         </Route>
         <Route element={<RequireAdmin />}>
           <Route path="/admin" element={<AdminLayout />}>

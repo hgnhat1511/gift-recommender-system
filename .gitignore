@@ -17,3 +17,4 @@
 **/.pytest_cache/
 ml-service/data/experiments/
 ml-service/models/experiments/
+core-backend/private_uploads/

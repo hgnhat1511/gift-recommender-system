@@ -44,11 +44,20 @@ async function createGhnShipment(req,res,next) {
     const connection1=await pool.getConnection();
     try{
         await connection1.beginTransaction();
-        const [[lockedOrder]]=await connection1.execute('SELECT id,order_code,status,payment_method,payment_status,total_amount,recipient_name,phone,shipping_address,shipping_carrier,tracking_number FROM orders WHERE id=? FOR UPDATE',[req.params.orderId]);
+        const [[lockedOrder]]=await connection1.execute('SELECT id,order_code,status,payment_method,payment_status,total_amount,recipient_name,phone,shipping_address,shipping_carrier,tracking_number,shipper_user_id FROM orders WHERE id=? FOR UPDATE',[req.params.orderId]);
         if(!lockedOrder){await connection1.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
         if(lockedOrder.status!=='PROCESSING'||(lockedOrder.payment_method==='VNPAY'&&lockedOrder.payment_status!=='PAID')){
             await connection1.rollback();
             return res.status(409).json({success:false,message:'Only a processing order that is paid or COD can be dispatched.'});
+        }
+        if(lockedOrder.shipper_user_id!=null){
+            await connection1.rollback();
+            return res.status(409).json({success:false,message:'Đơn hàng đã được gán cho nguồn vận chuyển nội bộ.'});
+        }
+        const [[anyShipment]]=await connection1.execute('SELECT id,provider FROM shipments WHERE order_id=? LIMIT 1 FOR UPDATE',[lockedOrder.id]);
+        if(anyShipment&&anyShipment.provider!=='GHN'){
+            await connection1.rollback();
+            return res.status(409).json({success:false,message:'Đơn hàng đã có nguồn vận chuyển khác.'});
         }
         order=lockedOrder;
         let [[existingShipment]]=await connection1.execute("SELECT id,client_order_code,provider_order_code,tracking_number,status,updated_at<=NOW() - INTERVAL 5 MINUTE AS is_stale FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1 FOR UPDATE",[order.id]);
@@ -153,7 +162,7 @@ async function ghnWebhook(req,res,next) {
     const connection=await pool.getConnection();
     try{
         await connection.beginTransaction();
-        const [[shipment]]=await connection.execute("SELECT id,order_id,status,DATE_FORMAT(last_event_at,'%Y-%m-%dT%H:%i:%sZ') last_event_at FROM shipments WHERE provider='GHN' AND (provider_order_code=? OR client_order_code=?) ORDER BY (provider_order_code=?) DESC LIMIT 1 FOR UPDATE",[event.OrderCode,String(event.ClientOrderCode||''),event.OrderCode]);
+        const [[shipment]]=await connection.execute("SELECT s.id,s.order_id,s.status,DATE_FORMAT(s.last_event_at,'%Y-%m-%dT%H:%i:%sZ') last_event_at FROM shipments s JOIN orders o ON o.id=s.order_id AND o.shipper_user_id IS NULL WHERE s.provider='GHN' AND (s.provider_order_code=? OR s.client_order_code=?) ORDER BY (s.provider_order_code=?) DESC LIMIT 1 FOR UPDATE",[event.OrderCode,String(event.ClientOrderCode||''),event.OrderCode]);
         if(!shipment){await connection.rollback();return res.json({success:true,ignored:true})}
         const occurredAt=new Date(event.Time);const occurredSql=occurredAt.toISOString().slice(0,19).replace('T',' ');
         await connection.execute('UPDATE shipments SET provider_order_code=COALESCE(provider_order_code,?),tracking_number=COALESCE(tracking_number,?) WHERE id=?',[event.OrderCode,event.OrderCode,shipment.id]);
@@ -166,9 +175,9 @@ async function ghnWebhook(req,res,next) {
             if(['PICKING','PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY'].includes(status)&&order.status==='PROCESSING')nextStatus='SHIPPED';
             if(status==='DELIVERED'&&['PROCESSING','SHIPPED'].includes(order.status))nextStatus='DELIVERED';
             if(nextStatus){
-                if(nextStatus==='DELIVERED'&&order.status==='PROCESSING')await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,\'PROCESSING\',\'SHIPPED\',\'Đơn vị vận chuyển đã lấy hàng\')',[order.id]);
+                if(nextStatus==='DELIVERED'&&order.status==='PROCESSING')await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note,source) VALUES (?,NULL,\'PROCESSING\',\'SHIPPED\',\'Đơn vị vận chuyển đã lấy hàng\',\'GHN\')',[order.id]);
                 await connection.execute('UPDATE orders SET status=?,delivered_at=IF(?=\'DELIVERED\',COALESCE(delivered_at,NOW()),delivered_at),payment_status=IF(?=\'DELIVERED\' AND payment_method=\'COD\',\'PAID\',payment_status) WHERE id=?',[nextStatus,nextStatus,nextStatus,order.id]);
-                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note) VALUES (?,NULL,?,?,?)',[order.id,order.status,nextStatus,`Cập nhật vận đơn GHN: ${getShipmentStatusLabel(status)}`]);
+                await connection.execute('INSERT INTO order_status_history (order_id,changed_by,from_status,to_status,note,source) VALUES (?,NULL,?,?,?,\'GHN\')',[order.id,order.status,nextStatus,`Cập nhật vận đơn GHN: ${getShipmentStatusLabel(status)}`]);
                 await connection.execute("INSERT INTO notifications (user_id,type,title,body,order_id) VALUES (?,'SHIPPING',?,?,?)",[order.user_id,`Cập nhật đơn ${order.order_code}`,`Đơn vận chuyển GHN: ${getShipmentStatusLabel(status)}.`,order.id]);
             }
         }
