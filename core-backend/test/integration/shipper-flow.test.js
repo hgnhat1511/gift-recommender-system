@@ -47,10 +47,10 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       });
       return { status: response.status, json: await response.json() };
     };
-    const rawApi = async (path, { method = 'POST', body, contentType, token } = {}) => {
+    const rawApi = async (path, { method = 'POST', body, contentType, token, headers = {} } = {}) => {
       const response = await fetch(`${baseUrl}${path}`, {
         method,
-        headers: { ...(contentType ? { 'content-type': contentType } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        headers: { ...(contentType ? { 'content-type': contentType } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
         body,
       });
       return { status: response.status, headers: response.headers, body: Buffer.from(await response.arrayBuffer()) };
@@ -106,6 +106,8 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.equal(listA.status, 200);
       assert.ok(listA.json.data.some((order) => order.id === orderA.id));
       assert.ok(!listB.json.data.some((order) => order.id === orderA.id));
+      assert.ok(!listA.json.data.some((order) => order.id === orderB.id), 'Unassigned orders must not expose recipient details to a shipper.');
+      assert.ok(!listB.json.data.some((order) => order.id === orderB.id), 'An unassigned order must not appear in any shipper list.');
 
       const otherOrder = await api(`/shipper/orders/${orderA.id}/dispatch`, { method: 'POST', token: shipperB.token });
       assert.equal(otherOrder.status, 403);
@@ -127,9 +129,13 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       const deniedUpload = await rawApi(`/shipper/orders/${orderA.id}/proof`, { body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64'), contentType: 'image/png', token: shipperB.token });
       assert.equal(deniedUpload.status, 403);
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64');
-      const uploaded = await rawApi(`/shipper/orders/${orderA.id}/proof`, { body: png, contentType: 'image/png', token: shipperA.token });
+      const uploaded = await rawApi(`/shipper/orders/${orderA.id}/proof`, {
+        body: png, contentType: 'image/png', token: shipperA.token,
+        headers: { 'content-disposition': 'attachment; filename="../../outside.png"' },
+      });
       assert.equal(uploaded.status, 201, uploaded.body.toString());
-      const [[proof]] = await pool.execute('SELECT mime_type,sha256,uploaded_by FROM delivery_proofs WHERE order_id=?', [orderA.id]);
+      const [[proof]] = await pool.execute('SELECT file_name,mime_type,sha256,uploaded_by FROM delivery_proofs WHERE order_id=?', [orderA.id]);
+      assert.match(proof.file_name, /^[a-f0-9-]{36}\.png$/i, 'Stored proof names must be random UUID filenames, not client paths.');
       assert.equal(proof.mime_type, 'image/png');
       assert.equal(proof.sha256, crypto.createHash('sha256').update(png).digest('hex'));
       assert.equal(String(proof.uploaded_by), shipperA.id);
@@ -146,6 +152,11 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.equal(ownerProof.headers.get('cache-control'), 'private, no-store');
       assert.equal(ownerProof.headers.get('x-content-type-options'), 'nosniff');
 
+      await pool.execute('UPDATE delivery_proofs SET file_name=? WHERE order_id=?', ['../outside.png', orderA.id]);
+      const pathTraversalRead = await rawApi(`/delivery-proofs/${orderA.id}`, { method: 'GET', token: customer.token });
+      await pool.execute('UPDATE delivery_proofs SET file_name=? WHERE order_id=?', [proof.file_name, orderA.id]);
+      assert.equal(pathTraversalRead.status, 404, 'Stored path traversal filenames must not be served.');
+
       const deliver = await api(`/shipper/orders/${orderA.id}/deliver`, { method: 'POST', token: shipperA.token });
       assert.equal(deliver.status, 200, JSON.stringify(deliver.json));
       assert.equal(deliver.json.data.status, 'DELIVERED');
@@ -154,11 +165,12 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.equal(saved.status, 'DELIVERED');
       assert.equal(saved.payment_status, 'PAID');
       assert.ok(saved.delivered_at);
-      const [history] = await pool.execute('SELECT from_status,to_status,source,changed_by FROM order_status_history WHERE order_id=? ORDER BY id', [orderA.id]);
+      const [history] = await pool.execute('SELECT from_status,to_status,source,changed_by,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [orderA.id]);
       assert.deepEqual(history.map((row) => [row.from_status, row.to_status, row.source]), [
         ['PROCESSING', 'SHIPPED', 'INTERNAL'], ['SHIPPED', 'DELIVERED', 'INTERNAL'],
       ]);
       assert.ok(history.every((row) => String(row.changed_by) === shipperA.id));
+      assert.ok(history.every((row) => row.created_at));
     });
 
     await t.test('GHN webhook does not transition an INTERNAL order', async () => {
@@ -185,6 +197,18 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       const shipperAction = await api(`/shipper/orders/${ghnOrder.id}/dispatch`, { method: 'POST', token: shipperA.token });
       assert.equal(shipperAction.status, 403);
 
+      const invalidSignature = await api('/shipments/ghn/webhook', {
+        method: 'POST',
+        body: {
+          OrderCode: `GHN-${ghnOrder.orderCode}`, ClientOrderCode: ghnOrder.orderCode,
+          ShopID: process.env.GHN_SHOP_ID, Status: 'delivering', Type: 'switch_status', Time: new Date().toISOString(),
+        },
+        headers: { 'x-giftly-shipping-secret': 'invalid-ghn-signature' },
+      });
+      assert.equal(invalidSignature.status, 401);
+      const [[afterInvalidSignature]] = await pool.execute('SELECT status FROM orders WHERE id=?', [ghnOrder.id]);
+      assert.equal(afterInvalidSignature.status, 'PROCESSING');
+
       for (const [status, expectedOrderStatus, offset] of [['delivering', 'SHIPPED', 1], ['delivered', 'DELIVERED', 2]]) {
         const event = {
           OrderCode: `GHN-${ghnOrder.orderCode}`, ClientOrderCode: ghnOrder.orderCode,
@@ -202,10 +226,87 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
           assert.ok(saved.delivered_at);
         }
       }
-      const [history] = await pool.execute('SELECT from_status,to_status,source FROM order_status_history WHERE order_id=? ORDER BY id', [ghnOrder.id]);
+      const [history] = await pool.execute('SELECT from_status,to_status,source,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [ghnOrder.id]);
       assert.deepEqual(history.map((row) => [row.from_status, row.to_status, row.source]), [
         ['PROCESSING', 'SHIPPED', 'GHN'], ['SHIPPED', 'DELIVERED', 'GHN'],
       ]);
+      assert.ok(history.every((row) => row.created_at));
+    });
+
+    await t.test('a shipper sees only assigned orders and a locked account loses access with its existing JWT', async () => {
+      const assignedOrder = await createProcessingOrder(customer.id);
+      const unassignedOrder = await createProcessingOrder(customer.id);
+      const assignToB = await api(`/admin/orders/${assignedOrder.id}/shipper`, {
+        method: 'POST', token: admin.token, body: { shipperUserId: shipperB.id },
+      });
+      assert.equal(assignToB.status, 201, JSON.stringify(assignToB.json));
+
+      const listA = await api('/shipper/orders', { token: shipperA.token });
+      const listB = await api('/shipper/orders', { token: shipperB.token });
+      assert.ok(!listA.json.data.some((order) => order.id === assignedOrder.id));
+      assert.ok(listB.json.data.some((order) => order.id === assignedOrder.id));
+      assert.ok(!listA.json.data.some((order) => order.id === unassignedOrder.id));
+      assert.ok(!listB.json.data.some((order) => order.id === unassignedOrder.id));
+
+      const lockedShipper = await createUser('SHIPPER');
+      const lock = await api(`/admin/customers/${lockedShipper.id}/status`, {
+        method: 'PATCH', token: admin.token, body: { status: 'LOCKED' },
+      });
+      assert.equal(lock.status, 200, JSON.stringify(lock.json));
+      const oldTokenRequest = await api('/shipper/orders', { token: lockedShipper.token });
+      assert.equal(oldTokenRequest.status, 401);
+    });
+
+    await t.test('internal delivery rejects invalid order steps and changing source after dispatch', async () => {
+      const order = await createProcessingOrder(customer.id);
+      const assigned = await api(`/admin/orders/${order.id}/shipper`, {
+        method: 'POST', token: admin.token, body: { shipperUserId: shipperA.id },
+      });
+      assert.equal(assigned.status, 201, JSON.stringify(assigned.json));
+
+      const deliverBeforeDispatch = await api(`/shipper/orders/${order.id}/deliver`, { method: 'POST', token: shipperA.token });
+      assert.equal(deliverBeforeDispatch.status, 409);
+      const [[stillProcessing]] = await pool.execute('SELECT status FROM orders WHERE id=?', [order.id]);
+      assert.equal(stillProcessing.status, 'PROCESSING');
+
+      const dispatch = await api(`/shipper/orders/${order.id}/dispatch`, { method: 'POST', token: shipperA.token });
+      assert.equal(dispatch.status, 200);
+      const reassignAfterDispatch = await api(`/admin/orders/${order.id}/shipper`, {
+        method: 'POST', token: admin.token, body: { shipperUserId: shipperB.id },
+      });
+      assert.equal(reassignAfterDispatch.status, 409);
+      const [[unchangedSource]] = await pool.execute('SELECT status,shipper_user_id FROM orders WHERE id=?', [order.id]);
+      assert.equal(unchangedSource.status, 'SHIPPED');
+      assert.equal(String(unchangedSource.shipper_user_id), shipperA.id);
+    });
+
+    await t.test('simultaneous and repeated internal delivery records one DELIVERED transition and one timestamp', async () => {
+      const order = await createProcessingOrder(customer.id);
+      const assigned = await api(`/admin/orders/${order.id}/shipper`, {
+        method: 'POST', token: admin.token, body: { shipperUserId: shipperB.id },
+      });
+      assert.equal(assigned.status, 201, JSON.stringify(assigned.json));
+      const dispatch = await api(`/shipper/orders/${order.id}/dispatch`, { method: 'POST', token: shipperB.token });
+      assert.equal(dispatch.status, 200);
+
+      const responses = await Promise.all([
+        api(`/shipper/orders/${order.id}/deliver`, { method: 'POST', token: shipperB.token }),
+        api(`/shipper/orders/${order.id}/deliver`, { method: 'POST', token: shipperB.token }),
+      ]);
+      assert.ok(responses.every((response) => response.status === 200));
+      assert.equal(responses.filter((response) => response.json.data.unchanged === true).length, 1);
+
+      const [[first]] = await pool.execute('SELECT status,payment_status,delivered_at FROM orders WHERE id=?', [order.id]);
+      assert.equal(first.status, 'DELIVERED');
+      assert.equal(first.payment_status, 'PAID');
+      assert.ok(first.delivered_at);
+      const repeated = await api(`/shipper/orders/${order.id}/deliver`, { method: 'POST', token: shipperB.token });
+      assert.equal(repeated.status, 200);
+      assert.equal(repeated.json.data.unchanged, true);
+      const [[second]] = await pool.execute('SELECT delivered_at FROM orders WHERE id=?', [order.id]);
+      assert.equal(new Date(second.delivered_at).getTime(), new Date(first.delivered_at).getTime());
+      const [[historyCount]] = await pool.execute("SELECT COUNT(*) total FROM order_status_history WHERE order_id=? AND to_status='DELIVERED'", [order.id]);
+      assert.equal(Number(historyCount.total), 1);
     });
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
