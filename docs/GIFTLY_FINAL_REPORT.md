@@ -30,7 +30,38 @@ Ngày chạy: 2026-11-11. Nhánh: `feature/giftly-luong-giao-hang`. Báo cáo n�
 | `e2e/visual-audit.spec.js` | 6 | Đạt |
 | **Tổng** | **28** | **28 passed** |
 
-Backend spec reporter ghi tổng suite và tên test, còn log lượt chạy này không lưu số leaf test theo từng backend file thành báo cáo riêng. Các integration file giao hàng/thanh toán được chạy trong suite gồm `cod-order-lifecycle.test.js`, `commerce.e2e.test.js`, `delivery-receipt.test.js`, `delivery-receipt-safe.test.js`, `dev-ghn-deliver.test.js`, `order-shipment-race.test.js`, `payment-flow-safe.test.js`, `shipper-flow.test.js`, `synthetic-integration.test.js` và `simulation-impact.test.js`. Tổng suite là 147/147; không suy diễn số đếm riêng từng file khi output không ghi chúng.
+Backend spec suite được chạy lại từng file theo thứ tự, với `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; các test ghi dữ liệu xác nhận cùng database. Mỗi dòng dưới là output thô `tests/pass/fail/skipped` của file đó.
+
+| Backend test file | Output `tests / pass / fail / skipped` |
+|---|---|
+| `test/cart-inventory.test.js` | `6 / 6 / 0 / 0` |
+| `test/cart-items-contract.test.js` | `14 / 14 / 0 / 0` |
+| `test/cart-merge-contract.test.js` | `5 / 5 / 0 / 0` |
+| `test/db-guard.test.js` | `1 / 1 / 0 / 0` |
+| `test/ghn-provider.test.js` | `6 / 6 / 0 / 0` |
+| `test/giftly-final-verification.test.js` | `7 / 7 / 0 / 0` |
+| `test/gift-tag-filter.test.js` | `8 / 8 / 0 / 0` |
+| `test/integration/cod-order-lifecycle.test.js` | `13 / 13 / 0 / 0` |
+| `test/integration/commerce.e2e.test.js` | `1 / 1 / 0 / 0` |
+| `test/integration/delivery-receipt.test.js` | `5 / 5 / 0 / 0` |
+| `test/integration/delivery-receipt-safe.test.js` | `7 / 7 / 0 / 0` |
+| `test/integration/dev-ghn-deliver.test.js` | `3 / 3 / 0 / 0` |
+| `test/integration/order-shipment-race.test.js` | `7 / 7 / 0 / 0` |
+| `test/integration/payment-flow-safe.test.js` | `4 / 4 / 0 / 0` |
+| `test/integration/shipper-flow.test.js` | `8 / 8 / 0 / 0` |
+| `test/integration/synthetic-integration.test.js` | `6 / 6 / 0 / 0` |
+| `test/loginRateLimiter.test.js` | `2 / 2 / 0 / 0` |
+| `test/order-contract.test.js` | `6 / 6 / 0 / 0` |
+| `test/order-inventory-reasons.test.js` | `8 / 8 / 0 / 0` |
+| `test/order-status-sync.test.js` | `2 / 2 / 0 / 0` |
+| `test/products-query-audit.test.js` | `1 / 1 / 0 / 0` |
+| `test/recommendation-bridge.test.js` | `2 / 2 / 0 / 0` |
+| `test/recommendation-ml-bridge.test.js` | `7 / 7 / 0 / 0` |
+| `test/shipment-status-sync.test.js` | `3 / 3 / 0 / 0` |
+| `test/simulation-impact.test.js` | `4 / 4 / 0 / 0` |
+| `test/synthetic-products-protection.test.js` | `8 / 8 / 0 / 0` |
+| `test/vnpay.test.js` | `3 / 3 / 0 / 0` |
+| **Tổng chạy riêng từng file** | **`147 / 147 / 0 / 0`** |
 
 ## Quy tắc nghiệp vụ đã đối chiếu
 

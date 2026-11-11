@@ -322,7 +322,7 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 - Giai đoạn 6: E2E Playwright 28 passed; frontend unit 24 pass, lint và build thành công.
 - Docker run 2026-11-11: isolated project `giftly_clean_20261111`, 5 services healthy/running; DB `giftly_e2e_test`, 16 migrations and 27 tables. Fixture: 1,000 demo products, 14 base products, 2,000 simulated orders, 3 REES46 demo users. Login through backend yielded `source=ranker_lc1`, 8 results. ML healthy; backend/frontend HTTP 200. Alternate ports 13307/16380/8001/5002/3001 were used because defaults were occupied. `docker compose down` stopped containers without `-v`; volumes remain.
-- Latest backend output: `tests 147`, `pass 147`, `fail 0`, `skipped 0`, `duration_ms 93109.4712`; the earlier 141-test run is historical.
+- Latest backend output: `tests 147`, `pass 147`, `fail 0`, `skipped 0`, `duration_ms 93109.4712`; the earlier 141-test run is historical. Per-file rerun: 27 files, 147 pass, 0 fail, 0 skipped; full table is in docs/GIFTLY_FINAL_REPORT.md.
 - Sự cố thao tác được ghi nhận: một lượt chạy importer từ máy host trỏ nhầm vào MySQL trên cổng 3306 nhưng vẫn dùng đúng DB `giftly_e2e_test`; output khi đó thêm 3 user demo, không thêm sản phẩm. Không xóa dữ liệu theo yêu cầu. Sau đó importer được chạy lại với `DB_HOST=127.0.0.1`, `DB_PORT=13306` trên DB cô lập `giftly_e2e_test` của project `giftly_clean`: thêm 188 sản phẩm và 3 user demo (tổng 202 sản phẩm gồm 14 seed + 188 REES46; 3 user). Không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`.
 
 ## Còn lại / chưa xác minh
