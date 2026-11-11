@@ -68,7 +68,9 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Frontend mặc định gọi `http://localhost:5000/api`. Có thể đặt `VITE_API_BASE_URL`; CORS backend dùng `CORS_ORIGIN` (danh sách origin phân tách dấu phẩy). Khi backend chạy trong cùng Docker network, dùng `mysql-db` và `redis-cache` thay cho `localhost`.
+Frontend mặc định gọi `http://localhost:5001/api`. Có thể đặt `VITE_API_BASE_URL`; CORS backend dùng `CORS_ORIGIN` (danh sách origin phân tách dấu phẩy). Khi backend chạy trong cùng Docker network, dùng `mysql-db` và `redis-cache` thay cho `localhost`.
+
+Để chạy đồng thời web và API bằng một lệnh, khởi động MySQL/Redis và migration như trên, rồi từ thư mục gốc repository chạy `npm.cmd run dev`. Giftly mở tại `http://localhost:5000`; API chạy tại `http://localhost:5001`. Nhấn Ctrl+C trong terminal để dừng cả hai tiến trình. Nếu cổng 5000 hoặc 5001 đã được dùng, dừng dịch vụ chiếm cổng trước khi chạy.
 
 Kiểm tra service:
 
