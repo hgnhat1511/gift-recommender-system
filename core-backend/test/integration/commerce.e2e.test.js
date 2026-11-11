@@ -19,6 +19,9 @@ test('Gift Finder, checkout, VNPAY/GHN callbacks and return inventory keep comme
     process.env.GHN_SHOP_ID = '777';
     process.env.GHN_WEBHOOK_SECRET = 'integration-only-dummy-ghn-secret';
 
+    const { resetTestDatabase } = require('../../scripts/resetTestDb');
+    await resetTestDatabase(testDatabase, { seed: true });
+
     const pool = require('../../config/db');
     const { app } = require('../../server');
     let server;

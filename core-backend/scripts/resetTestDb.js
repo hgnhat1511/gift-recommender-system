@@ -24,7 +24,8 @@ function assertSafeTestDatabase(dbName) {
 
 async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
     assertSafeTestDatabase(targetDb);
-    const { seed = false } = options;
+    const { seed = false, seedDemo = false } = options;
+    const seedCore = seed || seedDemo;
 
     console.log(`[resetTestDb] Đang khởi tạo lại database test sạch: "${targetDb}" (utf8mb4)...`);
 
@@ -54,6 +55,10 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
     });
 
     try {
+        const [[activeDatabase]] = await dbConn.query('SELECT DATABASE() name');
+        if (activeDatabase.name !== targetDb) throw new Error(`Connected to unexpected database "${activeDatabase.name}" instead of "${targetDb}".`);
+        console.log(`[resetTestDb] SELECT DATABASE(): ${activeDatabase.name}`);
+
         const migrationsDir = path.join(__dirname, '..', '..', 'database', 'migrations');
         const files = (await fs.readdir(migrationsDir)).filter((name) => name.endsWith('.sql')).sort();
 
@@ -141,7 +146,7 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
         console.log(`[resetTestDb] Đã áp dụng toàn bộ ${files.length} file migrations cho \`${targetDb}\`.`);
 
         // 3. Nếu yêu cầu seed catalog gốc (5 danh mục, 14 sản phẩm thật)
-        if (seed) {
+        if (seedCore) {
             console.log(`[resetTestDb] Đang nạp seed catalog cơ sở (5 danh mục, 14 sản phẩm thật)...`);
             const catalog = [
                 { category: 'Sinh nhật', products: [
@@ -190,6 +195,16 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
             console.log(`[resetTestDb] Đã seed 5 danh mục và 14 sản phẩm thật vào \`${targetDb}\`.`);
         }
 
+        if (seedDemo) {
+            console.log(`[resetTestDb] Nạp catalog demo từ file đã commit, trực tiếp vào \`${targetDb}\`...`);
+            const { import1000Catalog } = require('./import1000Catalog');
+            const { applyGiftTags } = require('./applyGiftTags');
+            const { simulateTransactions } = require('./simulateTransactions');
+            await import1000Catalog(targetDb, { isApply: true });
+            await applyGiftTags(targetDb, { isApply: true });
+            await simulateTransactions(targetDb, { isApply: true, numOrders: 2000, numEvents: 20000 });
+        }
+
         const [[tablesCount]] = await dbConn.query('SELECT COUNT(*) total FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()');
         console.log(`[resetTestDb] Hoàn tất reset \`${targetDb}\`: tổng cộng ${tablesCount.total} bảng.`);
     } finally {
@@ -200,7 +215,8 @@ async function resetTestDatabase(targetDb = 'giftly_e2e_test', options = {}) {
 if (require.main === module) {
     const target = process.argv[2] || 'giftly_e2e_test';
     const seed = process.argv.includes('--seed');
-    resetTestDatabase(target, { seed })
+    const seedDemo = process.argv.includes('--seed-demo');
+    resetTestDatabase(target, { seed, seedDemo })
         .then(() => process.exit(0))
         .catch((err) => {
             console.error('LỖI THỰC THI resetTestDb:', err.message);

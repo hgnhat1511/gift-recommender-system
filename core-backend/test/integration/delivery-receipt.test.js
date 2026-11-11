@@ -46,7 +46,8 @@ test('Delivery receipt confirmation and GHN delivery timestamps', {
       return json;
     };
     const register = async (name) => {
-      const email = `${name}-${crypto.randomUUID()}@example.invalid`;
+      const emailName = name.toLowerCase().replace(/\s+/g, '-');
+      const email = `${emailName}-${crypto.randomUUID()}@example.invalid`;
       await api('/auth/register', { method: 'POST', expected: 201, body: { fullName: name, email, password: 'Password-2026!' } });
       const login = await api('/auth/login', { method: 'POST', body: { email, password: 'Password-2026!' } });
       return { id: login.data.user.id, token: login.data.token };

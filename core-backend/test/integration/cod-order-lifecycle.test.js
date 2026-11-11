@@ -27,6 +27,8 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
   process.env.VNPAY_TMN_CODE = 'GIFTLYTEST';
   process.env.VNPAY_HASH_SECRET = 'integration-only-dummy-secret-never-use-for-merchant';
   process.env.VNPAY_RETURN_URL = 'http://127.0.0.1/api/payments/vnpay/return';
+  process.env.GHN_SHOP_ID = '98765';
+  process.env.GHN_WEBHOOK_SECRET = 'cod-lifecycle-ghn-secret';
 
   const vnpay = require('../../services/payments/vnpay');
   process.env.VNPAY_PAYMENT_URL = vnpay.SANDBOX_URL;
@@ -77,6 +79,29 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
         );
       }
       return { status: response.status, data: json.data, message: json.message, body: json };
+    };
+
+    let ghnEventOffset = 0;
+    const sendGhnEvent = async (orderId, status) => {
+      const [[order]] = await pool.query('SELECT order_code FROM orders WHERE id=?', [orderId]);
+      const [[shipment]] = await pool.query("SELECT id FROM shipments WHERE order_id=? AND provider='GHN' LIMIT 1", [orderId]);
+      if (!shipment) {
+        await pool.execute("INSERT INTO shipments (order_id,client_order_code,provider,provider_order_code,status) VALUES (?,?,'GHN',?,'CREATED')", [orderId, order.order_code, `GHN-${order.order_code}`]);
+      }
+      const event = {
+        OrderCode: `GHN-${order.order_code}`,
+        ClientOrderCode: order.order_code,
+        ShopID: process.env.GHN_SHOP_ID,
+        Status: status,
+        Type: 'switch_status',
+        Time: new Date(Math.ceil(Date.now() / 1000) * 1000 + (++ghnEventOffset) * 1000).toISOString(),
+      };
+      return api('/shipments/ghn/webhook', {
+        method: 'POST',
+        body: event,
+        headers: { 'x-giftly-shipping-secret': process.env.GHN_WEBHOOK_SECRET },
+        expectStatus: 200,
+      });
     };
 
     // 1. Tạo fixture người dùng: Khách A, Khách B, Admin
@@ -498,13 +523,8 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
       });
       const shippedOrderId = orderRes.data.orderId;
 
-      // Admin chuyển sang SHIPPED (bàn giao shipper)
-      await api(`/admin/orders/${shippedOrderId}/status`, {
-        method: 'PATCH',
-        auth: adminToken,
-        body: { status: 'SHIPPED', note: 'Bàn giao GHN' },
-        expectStatus: 200,
-      });
+      // GHN webhook hợp lệ cập nhật trạng thái đã bàn giao vận chuyển.
+      await sendGhnEvent(shippedOrderId, 'delivering');
 
       // Khách cố gắng hủy đơn đã bàn giao shipper
       const failCancel = await api(`/orders/${shippedOrderId}/cancel`, {
@@ -655,22 +675,14 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
     // TRƯỜNG HỢP 12: Quy trình chuyển tiếp đến SHIPPED và DELIVERED
     // =========================================================================
     await t.test('12. Quy trình chuyển tiếp đến SHIPPED và DELIVERED', async () => {
-      // PROCESSING -> SHIPPED
-      const shippedRes = await api(`/admin/orders/${orderForFulfillmentId}/status`, {
-        method: 'PATCH',
-        auth: adminToken,
-        body: { status: 'SHIPPED', note: 'Bàn giao đơn vị vận chuyển' },
-        expectStatus: 200,
-      });
+      // PROCESSING -> SHIPPED do webhook GHN báo đang phát.
+      await sendGhnEvent(orderForFulfillmentId, 'delivering');
+      const shippedRes = await api(`/orders/${orderForFulfillmentId}`, { auth: tokenA, expectStatus: 200 });
       assert.equal(shippedRes.data.status, 'SHIPPED');
 
-      // SHIPPED -> DELIVERED (Đơn COD tự động chuyển payment_status sang PAID)
-      const deliveredRes = await api(`/admin/orders/${orderForFulfillmentId}/status`, {
-        method: 'PATCH',
-        auth: adminToken,
-        body: { status: 'DELIVERED', note: 'Giao hàng thành công, khách đã thanh toán tiền mặt' },
-        expectStatus: 200,
-      });
+      // SHIPPED -> DELIVERED từ webhook GHN; COD được ghi nhận PAID khi giao thành công.
+      await sendGhnEvent(orderForFulfillmentId, 'delivered');
+      const deliveredRes = await api(`/orders/${orderForFulfillmentId}`, { auth: tokenA, expectStatus: 200 });
       assert.equal(deliveredRes.data.status, 'DELIVERED');
       assert.equal(deliveredRes.data.paymentStatus, 'PAID');
 
