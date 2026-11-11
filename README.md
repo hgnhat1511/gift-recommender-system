@@ -25,14 +25,22 @@ Giftly is a gift commerce project. The workspace contains React/Vite, Express 5,
 
 ## Chạy local
 
-Yêu cầu Node.js 20+, npm, Docker Desktop/Compose. Tại thư mục dự án:
+Yêu cầu Node.js 20+, npm, Docker Desktop/Compose. Compose chạy đủ MySQL, Redis, ML service, backend và frontend. Để chạy stack cô lập phục vụ demo/test, đặt mật khẩu và cổng riêng trong PowerShell trước khi khởi động:
 
 ```powershell
-docker compose up -d mysql-db redis-cache
-docker ps
+$env:MYSQL_ROOT_PASSWORD = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$env:JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:DB_NAME = 'giftly_e2e_test'
+$env:MYSQL_HOST_PORT = '13306'
+$env:REDIS_HOST_PORT = '16379'
+$env:ML_HOST_PORT = '18000'
+$env:BACKEND_HOST_PORT = '15000'
+$env:FRONTEND_HOST_PORT = '13000'
+docker compose -p giftly_clean up --build -d
+docker compose -p giftly_clean ps
 ```
 
-Compose dùng service `mysql-db`/`redis-cache`; tên container là `gift_mysql`/`gift_redis`. Không xóa volume để khởi động lại. Compose hiện chứa thông tin đăng nhập phát triển; không dùng cấu hình đó trong production.
+Tên project Compose giúp tránh va chạm tên với stack khác; các cổng trên cũng tránh dùng các cổng mặc định phổ biến. Hãy chọn secret ngẫu nhiên qua biến môi trường, không lưu secret vào Git. `DB_NAME` mặc định của Compose là `gift_ecommerce`; luôn đặt tên DB test riêng trước khi chạy migration hoặc dữ liệu thử. Lệnh dừng stack là `docker compose -p giftly_clean down`; lệnh này giữ volume. Không dùng `down -v` nếu cần giữ DB.
 
 Tạo `core-backend/.env` từ `.env.example`, đặt host `localhost` khi Node chạy ngoài Docker, rồi tạo JWT secret cục bộ:
 
@@ -84,10 +92,10 @@ Lệnh chỉ nâng vai trò tài khoản đang hoạt động có email trùng k
 1. Trang chủ lấy danh mục, số sản phẩm, sản phẩm nổi bật, mới nhất và mức tương tác từ catalog MySQL. Catalog `/products` có phân trang; tìm theo tên/mô tả/danh mục; lọc danh mục, khoảng giá, dịp, người nhận, sở thích, phong cách, loại quà và tồn kho; sắp xếp mới, giá, mức tương tác hoặc đánh giá.
 2. Chi tiết `/products/:id`: trạng thái tồn kho, đánh giá đã duyệt và sản phẩm liên quan.
 3. Gift Finder `/gift-finder`: lọc sản phẩm đang bán theo dịp, người nhận, ngân sách và metadata quà tặng; Python content baseline có thể xếp hạng lại ứng viên, còn Node rule matching là fallback. Mỗi gợi ý nêu tiêu chí khớp; lượt tìm và click được ghi vào MySQL. Đây là baseline nội dung có thể giải thích, chưa phải LC-1 và chưa cá nhân hóa theo lịch sử từng người.
-4. Visitors can add items to a browser-local cart and review current catalog prices and stock. Signing in merges those rows into the account cart; checkout remains account-only. Addresses, favorites, orders and deletion requests require an account.
-5. Checkout hỗ trợ COD và VNPAY sandbox khi cấu hình đủ merchant credentials; callback có chữ ký mới xác nhận thanh toán. Phí giao mặc định `SHIPPING_FEE=30000`; miễn phí từ `FREE_SHIPPING_MINIMUM=500000`. Đơn, chi tiết, lịch sử, coupon usage, thông báo và trừ kho được ghi trong transaction.
-6. Khách tìm đơn theo mã/trạng thái, xem lịch sử vận chuyển nội bộ, mua lại bằng cách chép sản phẩm còn hoạt động/còn hàng vào giỏ, hủy đơn `PENDING`, gửi yêu cầu đổi trả sau `DELIVERED` và theo dõi phản hồi. Giá hiện tại được tính lại ở giỏ/checkout; GHN có adapter tạo vận đơn/webhook tùy cấu hình, còn tracking nội bộ được giữ làm phương án dự phòng.
-7. `/admin`: dashboard có lọc ngày, catalog/danh mục, lịch sử điều chỉnh kho, đơn hàng lọc theo ngày/trạng thái/thanh toán, coupon, khách hàng/quyền, đổi trả và điều tiết đánh giá. Chuyển trạng thái đơn theo state machine; hủy đơn hoàn kho trong transaction. Yêu cầu đổi trả chỉ nhập lại kho sau khi được duyệt và chuyển `COMPLETED`; thao tác này không hoàn tiền. COD được ghi nhận đã thu khi đơn chuyển `DELIVERED`; VNPAY chỉ được xác nhận qua callback hợp lệ.
+4. Khách vãng lai có giỏ cục bộ; đăng nhập sẽ gộp giỏ vào tài khoản. Checkout, địa chỉ, yêu thích và đơn hàng yêu cầu đăng nhập.
+5. Checkout hỗ trợ COD và VNPAY sandbox khi có merchant credentials. Với VNPAY, đơn được tạo ở trạng thái chưa thanh toán cùng `payment_attempt` PENDING; IPN hợp lệ mới đánh dấu PAID. Hủy thanh toán làm attempt EXPIRED; callback muộn được đưa REVIEW theo logic hiện hành. Phí giao mặc định `SHIPPING_FEE=30000`; miễn phí từ `FREE_SHIPPING_MINIMUM=500000`.
+6. Vận chuyển có hai nguồn loại trừ nhau: GHN (trạng thái SHIPPED/DELIVERED đến từ webhook có chữ ký) hoặc giao nội bộ (đơn gán shipper). COD chuyển PAID khi DELIVERED. Khách xác nhận đã nhận hàng hoặc được coi là đã nhận sau `RETURN_WINDOW_DAYS` (mặc định 7 ngày); thời hạn đổi trả tính từ `delivered_at`. Ảnh chỉ đính kèm yêu cầu đổi trả, không tự cập nhật trạng thái giao hàng.
+7. `/admin`: quản lý catalog, tồn kho, đơn, coupon, khách hàng/quyền, đổi trả và đánh giá. Admin không có lối tắt đặt trạng thái SHIPPED/DELIVERED; GHN webhook hoặc shipper của đơn INTERNAL thực hiện chuyển trạng thái tương ứng. Duyệt đổi trả không tự hoàn tiền.
 
 JWT lưu ở session storage mặc định hoặc local storage nếu chọn ghi nhớ. Đây là phương án demo; production nên triển khai cookie `HttpOnly`, CSP và cấu hình HTTPS. Logout xóa token ở trình duyệt; JWT phát hành không bị thu hồi và có hiệu lực tới khi hết hạn (mặc định 1 giờ). Đổi mật khẩu cũng không thu hồi JWT cũ.
 
@@ -148,33 +156,21 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 
 ## Migration và dữ liệu
 
-`npm.cmd run migrate` áp dụng toàn bộ file SQL có thứ tự trong `database/migrations/`; cột mở rộng được thêm sau khi kiểm tra `information_schema`. Các bảng mới gồm địa chỉ, giỏ, đơn, chi tiết/lịch sử trạng thái, lịch sử hãng/mã vận đơn (`order_shipping_history`), yêu cầu xóa tài khoản có audit (`account_deletion_requests`), banner (`homepage_banners`), coupon/lượt dùng, yêu thích, sự kiện, đánh giá, thông báo, nhật ký tồn kho, đổi trả và admin audit. Migration cũng bổ sung `shipping_carrier`, `tracking_number` và `cart_items.is_selected` cho dữ liệu cũ; các dòng giỏ đã có mặc định vẫn được chọn. Các hàng `users`, `categories`, `products` cũ được giữ nguyên.
-`npm.cmd run migrate` áp dụng toàn bộ file SQL có thứ tự trong `database/migrations/`; cột mở rộng được thêm sau khi kiểm tra `information_schema`. Các bảng mới gồm địa chỉ, giỏ, đơn, chi tiết/lịch sử trạng thái, lịch sử hãng/mã vận đơn (`order_shipping_history`), yêu cầu xóa tài khoản có audit (`account_deletion_requests`), banner (`homepage_banners`), phạm vi coupon theo danh mục (`coupon_categories`), coupon/lượt dùng, yêu thích, sự kiện, đánh giá, thông báo, nhật ký tồn kho, đổi trả và admin audit. Migration cũng bổ sung `shipping_carrier`, `tracking_number` và `cart_items.is_selected` cho dữ liệu cũ; các dòng giỏ đã có mặc định vẫn được chọn. Các hàng `users`, `categories`, `products` và coupon hiện hữu được giữ nguyên.
-
-`npm.cmd run seed:demo` thêm catalog minh họa. Không có tài khoản hay mật khẩu admin mặc định.
+`npm.cmd run migrate` áp dụng các migration có thứ tự trong `database/migrations/`. Runner bỏ qua migration đã ghi nhận; không chạy lệnh này trên DB dùng chung nếu chưa xác định rõ `DB_NAME`. `npm.cmd run seed:demo` thêm catalog minh họa 5 danh mục và 14 sản phẩm nếu chưa tồn tại. Không có tài khoản hay mật khẩu admin mặc định.
 
 ## Kiểm tra đã thực hiện
 
-- `npm.cmd run migrate` chạy thành công nhiều lần trên MySQL đang dùng; migration giữ dữ liệu hiện có.
-- `npm.cmd run seed:demo` chạy hai lần và vẫn chỉ có 5 danh mục/14 sản phẩm demo.
-- Bộ integration trước đó trên MySQL/Redis: checkout/auth 48/48, tồn kho/đổi trả/dashboard 22/22, tracking/Gift Finder 6/6, coupon CRUD 6/6, review distribution 1/1, SQL injection qua tìm kiếm catalog 1/1. Các kiểm tra gồm role, giá/coupon server-side, idempotency, quyền đơn, state machine, review đã mua, nhập lại tồn kho và validation sự kiện.
-- Luồng vận chuyển hiện tại: 14 assertion API/MySQL đạt: chỉ cho phép khi đơn đang xử lý/giao, cập nhật và sửa tracking, bỏ qua bản cập nhật trùng, lịch sử, thông báo, quyền xem và hoàn kho khi hủy.
-- Tìm đơn/đổi trả: 7 assertion API/MySQL đạt: tìm theo mã cùng trạng thái, cách ly quyền xem, tạo/đọc yêu cầu, phản hồi admin và kiểm tra tồn kho.
-- Mua lại: 7 assertion API/MySQL đạt: chặn đơn người khác, gộp giỏ, từ chối vượt tồn và giữ nguyên giỏ khi giao dịch bị từ chối.
-- Yêu cầu xóa tài khoản: 11 assertion API/MySQL đạt cho xác thực lại mật khẩu, chặn yêu cầu trùng, phân quyền admin, trạng thái/phản hồi riêng tư và notification. Tài khoản không bị xóa tự động; fixture đã được dọn.
-- Chọn dòng giỏ hàng: 13 assertion API/MySQL đạt cho validation/quyền chọn, subtotal/quote, checkout một phần, giữ hàng chưa chọn khi đặt/retry và stock chỉ trừ dòng đã mua. Fixture đã dọn, stock gốc khôi phục.
-- Coupon theo danh mục: 20 assertion API/MySQL đạt cho xác thực category, phân quyền CRUD, minimum trên subtotal đủ điều kiện, quote và checkout theo giá server-side, hủy đơn hoàn lượt dùng/tồn kho. Fixture đã dọn.
-- Banner trang chủ: 19 assertion API/MySQL đạt cho quyền customer/admin, URL an toàn, lịch hiển thị, CRUD, ẩn mềm và dữ liệu công khai. Tài khoản và banner fixture đã được dọn.
-- Sau các thay đổi: `npm.cmd run lint`, `npm.cmd run build`, `node --check` các controller/route backend liên quan và chạy lại migration đều đạt. MySQL/Redis health check trả thành công.
-- Fixture người dùng/đơn/banner/coupon của các lượt test đã được dọn; kiểm tra database xác nhận 0 fixture, giữ nguyên 5 danh mục/14 sản phẩm đang bán.
+Snapshot xác minh giai đoạn 6–7 ngày 2026-11-11: frontend unit test 24 pass/0 fail; lint và build thành công; Playwright 28 pass. Docker Compose project `giftly_clean` đã chạy đủ 5 dịch vụ healthy trên MySQL volume mới với `DB_NAME=giftly_e2e_test`; migration 000–014 và seed demo thành công. Đăng nhập tài khoản demo REES46 qua backend trả gợi ý với `source=ranker_lc1` (8 sản phẩm); ML `/health` healthy; frontend trả HTTP 200. Sau kiểm tra đã chạy `docker compose -p giftly_clean down` (không `-v`), nên volume còn nguyên.
+
+Backend suite chưa được chạy lại trong giai đoạn 7; xem `PROGRESS.md` và `docs/GIFTLY_FINAL_REPORT.md` để biết phạm vi từng lần đo. Build frontend có cảnh báo bundle JavaScript 515.68 kB vượt ngưỡng khuyến nghị 500 kB; build vẫn thành công.
 
 ## Giới hạn đã biết
 
-- Thanh toán chỉ COD; không có cổng thanh toán thật.
-- Admin lưu hãng vận chuyển, mã vận đơn và lịch sử cập nhật trong Giftly; khách xem được trên chi tiết đơn và nhận thông báo trong app. Chưa kết nối API hãng vận chuyển nên không có tracking thời gian thực.
+- VNPAY và GHN phụ thuộc cấu hình merchant/sandbox; cần webhook GHN hợp lệ mới cập nhật đơn GHN. Không coi thử nghiệm local là xác nhận tích hợp production.
+- GHN webhook và shipper nội bộ là hai nguồn trạng thái tách biệt; ứng dụng demo không có đối soát vận chuyển thực tế.
 - Chưa cấu hình email provider: quên/đặt lại mật khẩu bị vô hiệu hóa, không tạo token giả.
 - `ml-service`: Mô hình xếp hạng Ranker LC-1 (LightGBM) đã được huấn luyện trên tập dữ liệu REES46 eCommerce events, đạt Validation NDCG@10 = 0.085476 (+37,04% so với baseline 0.062373); kết quả đánh giá chính thức trên hai tập test độc lập: `test_1` đạt NDCG@10 = 0.071261 (+27,77%, 95% CI: [+0.013188, +0.018063]) và `test_2` đạt NDCG@10 = 0.070601 (+32,79%, 95% CI: [+0.015119, +0.019819]). Mô hình đã được đóng băng cố định tại `ml-service/models/ranker_best_model.pkl` (SHA-256: `1d11488782894eae3b4eb142943303f4c9e85d0784f800047396d4f444eea8ff`). Mô hình được phục vụ online qua FastAPI endpoint `POST /recommend/rank` và `GET /health` (container `gift_ml_service`). Tuy nhiên, cá nhân hóa hiện tại chỉ áp dụng cho 3 tài khoản demo có `ml_user_id` liên kết REES46; khách vãng lai và tài khoản khác dùng fallback an toàn. Gift Finder hiện dùng content matching theo metadata catalog.
-- `docker compose`: Hiện tại trong cấu hình compose chỉ mới chạy container `ml-service` (cùng `mysql-db`, `redis-cache`). Các service `core-backend` và `core-frontend` hiện chạy cục bộ bằng tiến trình Node.js trên máy phát triển, chưa được container hóa toàn bộ trong compose.
+- Bộ Docker Compose gồm 5 dịch vụ đã được chạy kiểm tra trong project cô lập `giftly_clean`; dữ liệu nằm trong named volume riêng. Khi dùng trên máy khác cần đặt `MYSQL_ROOT_PASSWORD`, `JWT_SECRET`, `DB_NAME` và chọn cổng phù hợp.
 - Catalog demo dùng ảnh URL HTTPS bên ngoài; chưa có upload ảnh hoặc CMS cho nội dung tĩnh. Banner trang chủ được quản lý từ admin.
 - Guest cart rows in localStorage contain only product IDs, quantities and selection state. Prices and stock come from the catalog API and are revalidated in MySQL during merge. A conflict returns HTTP 409 and leaves the guest cart available for correction.
 - Trang chi tiết đơn có bản in từ snapshot đã lưu và có thể lưu PDF qua trình duyệt; chưa sinh PDF riêng ở server. Chưa có biến thể sản phẩm hoặc upload ảnh.

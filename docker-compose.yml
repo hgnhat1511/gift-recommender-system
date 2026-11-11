@@ -1,35 +1,42 @@
 services:
   mysql-db:
     image: mysql:8.0
-    container_name: gift_mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: gift_ecommerce
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD for local Compose}
+      MYSQL_DATABASE: ${DB_NAME:-gift_ecommerce}
       TZ: Asia/Ho_Chi_Minh
     ports:
-      - "3306:3306"
+      - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis-cache:
     image: redis:alpine
-    container_name: gift_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   ml-service:
     build:
       context: ./ml-service
       dockerfile: Dockerfile
-    container_name: gift_ml_service
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${ML_HOST_PORT:-8000}:8000"
     environment:
       - PORT=8000
     volumes:
@@ -41,47 +48,57 @@ services:
       timeout: 5s
       retries: 3
     depends_on:
-      - redis-cache
+      redis-cache:
+        condition: service_healthy
 
   core-backend:
     build:
       context: ./core-backend
       dockerfile: Dockerfile
-    container_name: gift_core_backend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "${BACKEND_HOST_PORT:-5000}:5000"
+    volumes:
+      - ./database/migrations:/database/migrations:ro
     environment:
       - PORT=5000
       - DB_HOST=mysql-db
       - DB_PORT=3306
       - DB_USER=root
-      - DB_PASSWORD=rootpassword
-      - DB_NAME=gift_ecommerce
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD for local Compose}
+      - DB_NAME=${DB_NAME:-gift_ecommerce}
       - REDIS_HOST=redis-cache
       - REDIS_PORT=6379
       - REDIS_URL=redis://redis-cache:6379
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_SERVICE_TIMEOUT_MS=1500
-      - JWT_SECRET=dev_secret_change_this_before_production_2026
-      - CORS_ORIGIN=http://localhost:3000,http://localhost:5173
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET for local Compose}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173}
     depends_on:
-      - mysql-db
-      - redis-cache
-      - ml-service
+      mysql-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   core-frontend:
     build:
       context: ./core-frontend
       dockerfile: Dockerfile
-    container_name: gift_core_frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:${BACKEND_HOST_PORT:-5000}/api
     restart: unless-stopped
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://core-backend:5000
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
     depends_on:
-      - core-backend
+      core-backend:
+        condition: service_healthy
 
 volumes:
   mysql_data:
