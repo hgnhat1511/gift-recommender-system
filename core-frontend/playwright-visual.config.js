@@ -3,7 +3,7 @@ import process from 'node:process';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'visual-audit.spec.js',
+  testMatch: ['visual-audit.spec.js', 'phase5-commerce-ui.spec.js'],
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

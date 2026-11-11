@@ -123,6 +123,13 @@ export const PRODUCT_STATUS = Object.freeze({
   INACTIVE: 'Ngừng bán',
 });
 
+export const SYNTHETIC_PRODUCT_LABEL = Object.freeze({
+  BADGE: 'Sản phẩm demo, không đặt mua',
+  BUTTON: 'Không đặt mua',
+  CARD_TAG: 'Demo',
+  ADMIN_BADGE: 'Dữ liệu demo',
+});
+
 export const DELETION_STATUS = Object.freeze({
   PENDING: 'Đang chờ xem xét',
   REVIEWED: 'Đã được xem xét',
