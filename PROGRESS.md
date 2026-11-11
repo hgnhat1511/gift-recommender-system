@@ -337,3 +337,10 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 - Playwright full run after the assigned-order visibility assertion: 28 passed in 1.4m. The internal shipment scenario covers COD delivery, customer receipt/return, and shipper A/B isolation; the GHN scenario uses a signed local webhook.
 - Docker compose services used an isolated project and `giftly_e2e_test`; no writes were made to `gift_ecommerce` or `giftly_verification_test` in this run. The root `.env` contains local-only generated Compose secrets and is ignored by Git.
 - Remaining limits: VNPAY/GHN production merchant flows were not exercised; Giftly interactions were not used to train LC-1; refunds and email delivery are not integrated.
+
+## Cập nhật kiểm tra tài khoản shipper dev (2026-11-11)
+
+- Khóa `scripts/createDevShipper.js`: từ chối production, yêu cầu cả `DB_NAME` và `TEST_DB_NAME` đúng bằng `giftly_e2e_test`, rồi kiểm tra `SELECT DATABASE()` trước khi ghi. Tên, email và mật khẩu lấy từ biến môi trường; mật khẩu dài 8–72 byte. Thêm lệnh `npm.cmd run shipper:create:dev` và hướng dẫn README.
+- Test mục tiêu: `node --test --test-reporter=spec test/integration/dev-shipper-script.test.js` với `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; output xác nhận `[dev-shipper-script.test.js] SELECT DATABASE(): giftly_e2e_test`, `tests 1`, `pass 1`, `fail 0`, `skipped 0`.
+- Backend suite chạy lại: `node --test --test-reporter=spec --test-concurrency=1` trên `giftly_e2e_test`; `tests 148`, `pass 148`, `fail 0`, `cancelled 0`, `skipped 0`, `duration_ms 83424.8761`. Output thô lưu tạm trong `core-backend/backend-suite-current.log` khi kiểm tra; file log không thuộc thay đổi sẽ commit.
+- Không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`; không chạy migration.

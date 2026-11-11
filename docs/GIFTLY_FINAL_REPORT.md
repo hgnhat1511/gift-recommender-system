@@ -6,7 +6,7 @@ Ngày chạy: 2026-11-11. Nhánh: `feature/giftly-luong-giao-hang`. Báo cáo n�
 
 | Hạng mục | Mức xác minh | Lệnh / thao tác | Output ghi nhận |
 |---|---|---|---|
-| Backend | Đã chạy | `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; `node --test --test-reporter=spec --test-concurrency=1` tại `core-backend` | Thô: `ℹ tests 147`, `ℹ suites 15`, `ℹ pass 147`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 0`, `ℹ todo 0`, `ℹ duration_ms 93109.4712` |
+| Backend | Đã chạy | `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`; `node --test --test-reporter=spec --test-concurrency=1` tại `core-backend` | Thô: `ℹ tests 148`, `ℹ suites 15`, `ℹ pass 148`, `ℹ fail 0`, `ℹ cancelled 0`, `ℹ skipped 0`, `ℹ todo 0`, `ℹ duration_ms 83424.8761`; có thêm `test/integration/dev-shipper-script.test.js` |
 | Frontend unit | Đã chạy | `npm.cmd test` tại `core-frontend` | Thô: `# tests 24`, `# pass 24`, `# fail 0`, `# skipped 0` |
 | Frontend lint | Đã chạy | `npm.cmd run lint` | Thô: `eslint .`, exit code `0` |
 | Frontend build | Đã chạy | `npm.cmd run build` | Thô: `✓ 1998 modules transformed`, `✓ built in 539ms`; exit code `0` |
@@ -46,6 +46,7 @@ Backend spec suite được chạy lại từng file theo thứ tự, với `DB_
 | `test/integration/delivery-receipt.test.js` | `5 / 5 / 0 / 0` |
 | `test/integration/delivery-receipt-safe.test.js` | `7 / 7 / 0 / 0` |
 | `test/integration/dev-ghn-deliver.test.js` | `3 / 3 / 0 / 0` |
+| `test/integration/dev-shipper-script.test.js` | `1 / 1 / 0 / 0` |
 | `test/integration/order-shipment-race.test.js` | `7 / 7 / 0 / 0` |
 | `test/integration/payment-flow-safe.test.js` | `4 / 4 / 0 / 0` |
 | `test/integration/shipper-flow.test.js` | `8 / 8 / 0 / 0` |
@@ -61,7 +62,7 @@ Backend spec suite được chạy lại từng file theo thứ tự, với `DB_
 | `test/simulation-impact.test.js` | `4 / 4 / 0 / 0` |
 | `test/synthetic-products-protection.test.js` | `8 / 8 / 0 / 0` |
 | `test/vnpay.test.js` | `3 / 3 / 0 / 0` |
-| **Tổng chạy riêng từng file** | **`147 / 147 / 0 / 0`** |
+| **Tổng chạy riêng từng file** | **`148 / 148 / 0 / 0`** |
 
 ## Quy tắc nghiệp vụ đã đối chiếu
 

@@ -10,7 +10,8 @@
     "test:integration": "node --test test/integration/commerce.e2e.test.js",
     "migrate": "node scripts/migrate.js",
     "seed:demo": "node scripts/seedDemo.js",
-    "admin:promote": "node scripts/promoteAdmin.js"
+    "admin:promote": "node scripts/promoteAdmin.js",
+    "shipper:create:dev": "node scripts/createDevShipper.js"
   },
   "keywords": [],
   "author": "",

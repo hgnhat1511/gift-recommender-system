@@ -177,7 +177,7 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 
 ## Kiểm tra đã thực hiện
 
-Verification snapshot (2026-11-11): backend suite 147 tests, 147 pass, 0 fail, 0 skipped on giftly_e2e_test; frontend unit 24 pass; lint and build pass; Playwright 28/28 pass. Docker project giftly_clean_20261111 ran all 5 services on a separate giftly_e2e_test database, applied all 16 migrations and seeded demo fixtures. REES46 demo login through the container backend returned source=ranker_lc1 with 8 recommendations; ML /health and frontend HTTP checks returned healthy/200. Host ports 3000, 5000 and 3306 were occupied, so this run used ports 3001, 5002 and 13307 (plus 16380 and 8001). The project was stopped with docker compose down, without -v; its named volumes remain.
+Verification snapshot (2026-11-11): backend suite 148 tests, 148 pass, 0 fail, 0 skipped on giftly_e2e_test; frontend unit 24 pass; lint and build pass; Playwright 28/28 pass. Docker project giftly_clean_20261111 ran all 5 services on a separate giftly_e2e_test database, applied all 16 migrations and seeded demo fixtures. REES46 demo login through the container backend returned source=ranker_lc1 with 8 recommendations; ML /health and frontend HTTP checks returned healthy/200. Host ports 3000, 5000 and 3306 were occupied, so this run used ports 3001, 5002 and 13307 (plus 16380 and 8001). The project was stopped with docker compose down, without -v; its named volumes remain.
 
 Lượt backend đầu tiên khi chưa nạp fixture demo có test đỏ; chạy lại sau khi nạp fixture bằng `--seed-demo` đạt kết quả nêu trên, không sửa assertion. Các trang tải theo route để giảm JavaScript ban đầu; build hiện không còn cảnh báo chunk vượt ngưỡng 500 kB.
 
@@ -309,6 +309,8 @@ node scripts/devGhnDeliver.js <giftly-order-code> <ghn-order-code>
 ```
 
 The script sends local `delivering` and `delivered` webhook events using the configured shared secret. It refuses production, any database other than `giftly_e2e_test`, and non-local API URLs. It does not contact GHN. The database check applies to the script environment; start the local backend with the same DB variables.
+
+To create a development shipper account, set `DB_NAME` and `TEST_DB_NAME` to `giftly_e2e_test`, and set `SHIPPER_NAME`, `SHIPPER_EMAIL`, and `SHIPPER_PASSWORD` in the process environment. Run `npm.cmd run shipper:create:dev` from `core-backend`. The script checks the connected database before writing and refuses production or any database other than `giftly_e2e_test`; it creates or updates only a SHIPPER account. Keep the password out of Git and documentation.
 
 The Python service provides `/health`, `/model`, `/recommend/rank`, `/recommendations`, `/gift-finder` and `/similar`. `/recommend/rank` serves the frozen LightGBM LC-1 model for compatible REES46 IDs; `/recommendations` and `/gift-finder` are content/rule baselines, not the trained ranker. Express validates returned product IDs and falls back to Node ranking if Python is unavailable. Gift Finder filters candidates against Giftly's real, sellable catalog before the Python content baseline can reorder them. LC-1's offline metrics are from REES46; Giftly-domain evaluation and retraining remain open work. Start the service from `ml-service`:
 
