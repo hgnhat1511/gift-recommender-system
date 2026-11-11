@@ -28,19 +28,36 @@ Giftly is a gift commerce project. The workspace contains React/Vite, Express 5,
 Yêu cầu Node.js 20+, npm, Docker Desktop/Compose. Compose chạy đủ MySQL, Redis, ML service, backend và frontend. Để chạy stack cô lập phục vụ demo/test, đặt mật khẩu và cổng riêng trong PowerShell trước khi khởi động:
 
 ```powershell
-$env:MYSQL_ROOT_PASSWORD = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$env:MYSQL_ROOT_PASSWORD = node -p "require('node:crypto').randomBytes(48).toString('base64url')"
+$env:JWT_SECRET = node -p "require('node:crypto').randomBytes(48).toString('base64url')"
 $env:DB_NAME = 'giftly_e2e_test'
 $env:MYSQL_HOST_PORT = '13306'
 $env:REDIS_HOST_PORT = '16379'
 $env:ML_HOST_PORT = '18000'
 $env:BACKEND_HOST_PORT = '15000'
 $env:FRONTEND_HOST_PORT = '13000'
-docker compose -p giftly_clean up --build -d
-docker compose -p giftly_clean ps
+$composeProject = "giftly_clean_$((Get-Date).ToString('yyyyMMdd_HHmmss'))"
+$env:CORS_ORIGIN = "http://localhost:$env:FRONTEND_HOST_PORT"
+docker compose -p $composeProject up --build -d
+docker compose -p $composeProject ps
 ```
 
-Tên project Compose giúp tránh va chạm tên với stack khác; các cổng trên cũng tránh dùng các cổng mặc định phổ biến. Hãy chọn secret ngẫu nhiên qua biến môi trường, không lưu secret vào Git. `DB_NAME` mặc định của Compose là `gift_ecommerce`; luôn đặt tên DB test riêng trước khi chạy migration hoặc dữ liệu thử. Lệnh dừng stack là `docker compose -p giftly_clean down`; lệnh này giữ volume. Không dùng `down -v` nếu cần giữ DB.
+Use a new Compose project name to get fresh named volumes. Do not reuse a previous project when a clean database is required. Select free host ports. Keep generated secrets in environment variables only. Set DB_NAME=giftly_e2e_test before migrations or tests that write data; do not use gift_ecommerce or giftly_verification_test. Stop with docker compose -p $composeProject down to preserve volumes; do not use down -v.
+
+Prepare the schema and catalog in the MySQL container from core-backend. resetTestDb accepts only an isolated database ending in _test.
+
+```powershell
+$env:DB_HOST = '127.0.0.1'
+$env:DB_PORT = $env:MYSQL_HOST_PORT
+$env:DB_USER = 'root'
+$env:DB_PASSWORD = $env:MYSQL_ROOT_PASSWORD
+$env:TEST_DB_NAME = 'giftly_e2e_test'
+node scripts/resetTestDb.js giftly_e2e_test --seed-demo
+$env:DEMO_USER_PASSWORD = node -p "require('node:crypto').randomBytes(32).toString('base64url')"
+node scripts/importReesCatalog.js --apply
+```
+
+Do not print the demo password or commit it; keep it in the process environment when logging into a fixture account.
 
 Tạo `core-backend/.env` từ `.env.example`, đặt host `localhost` khi Node chạy ngoài Docker, rồi tạo JWT secret cục bộ:
 
@@ -160,7 +177,7 @@ Thử toàn bộ API bằng Postman/Hoppscotch. Không chia sẻ JWT thật. Đ�
 
 ## Kiểm tra đã thực hiện
 
-Snapshot xác minh ngày 2026-11-11: backend suite 141 pass/0 fail/0 skipped với fixture `resetTestDb.js --seed-demo`; frontend unit test 24 pass/0 fail; lint thành công; build thành công với entry chunk 287.50 kB; Playwright 28 passed. Docker Compose project `giftly_clean` đã chạy đủ 5 dịch vụ healthy trên MySQL volume mới với `DB_NAME=giftly_e2e_test`; migration 000–014 và seed demo thành công. Đăng nhập tài khoản demo REES46 qua backend trả gợi ý với `source=ranker_lc1` (8 sản phẩm); ML `/health` healthy; frontend trả HTTP 200. Sau kiểm tra đã chạy `docker compose -p giftly_clean down` (không `-v`), nên volume còn nguyên.
+Verification snapshot (2026-11-11): backend suite 147 tests, 147 pass, 0 fail, 0 skipped on giftly_e2e_test; frontend unit 24 pass; lint and build pass; Playwright 28/28 pass. Docker project giftly_clean_20261111 ran all 5 services on a separate giftly_e2e_test database, applied all 16 migrations and seeded demo fixtures. REES46 demo login through the container backend returned source=ranker_lc1 with 8 recommendations; ML /health and frontend HTTP checks returned healthy/200. Host ports 3000, 5000 and 3306 were occupied, so this run used ports 3001, 5002 and 13307 (plus 16380 and 8001). The project was stopped with docker compose down, without -v; its named volumes remain.
 
 Lượt backend đầu tiên khi chưa nạp fixture demo có test đỏ; chạy lại sau khi nạp fixture bằng `--seed-demo` đạt kết quả nêu trên, không sửa assertion. Các trang tải theo route để giảm JavaScript ban đầu; build hiện không còn cảnh báo chunk vượt ngưỡng 500 kB.
 
@@ -306,25 +323,25 @@ Set `ML_SERVICE_URL=http://127.0.0.1:8000`; `ML_SERVICE_TIMEOUT_MS` bounds backe
 
 Migrations `008_payments_and_shipments.sql` and `009_shipment_client_order_code.sql` add payment attempts, shipments and event history while preserving orders. Run `cd core-backend; npm.cmd run migrate`; it is safe to rerun. Existing product and user data are not reset.
 
-Verified for this implementation: backend `npm.cmd test` (14 passing; the isolated database test is skipped unless configured), `node --check` (38 JavaScript files), frontend `npm.cmd run lint` and `npm.cmd run build`, and Python unittest discovery (5 passing). Migrations 000–010 were run repeatedly on development MySQL; 000–010 plus `seed:demo` also passed on a uniquely named fresh disposable database, which was removed after verification. The persisted API integration suite passed on a separate empty test database and covered registration, JWT, Gift Finder fallback, address, cart, quote, idempotent order create, detail, cancellation and stock restoration; its fixtures/schema were removed. A temporary shipment fixture verified delivered, stale, duplicate and backward GHN callbacks; fixture rows were removed. VNPAY callback/initiation checks used test-only credentials and temporary fixtures, not a live provider account. MySQL and Redis health endpoints passed. The local database currently has 0 users/orders/payment attempts/shipments, while 5 categories and 14 products remain.
+Historical verification entry from an earlier implementation; its development-database migration evidence and test totals are not the current verification snapshot. See the latest snapshot above and docs/GIFTLY_FINAL_REPORT.md.
 
-Run backend unit tests with `cd core-backend; npm.cmd test`; Python tests with `cd ml-service; .\.venv\Scripts\python.exe -m unittest discover -s tests -v`; frontend checks with `cd core-frontend; npm.cmd run lint; npm.cmd run build`. Run browser flows with `cd core-frontend; npm.cmd run test:e2e`; Playwright starts Express and Vite, uses Microsoft Edge, and pins the backend to `giftly_verification_test` by default. This test database must be migrated and seeded; set `PLAYWRIGHT_DB_NAME` only to another isolated `giftly_*_test` schema. MySQL/Redis and Edge are required. The nine browser scenarios cover guest cart; customer COD checkout/order detail; VNPAY sandbox URL initiation while payment remains unpaid; admin dashboard/inventory ledger; order transitions; customer lock/unlock; customer-visible shipment tracking; return request/review/restock; and admin coupon creation through checkout redemption. Cleanup permits only cancelled unpaid orders or delivered COD orders with a completed return and zero net inventory movement; it then removes the fixture and audit rows.
+The current Playwright config uses the isolated giftly_e2e_test database by default and refuses other database names in its DB-writing setup. Set PLAYWRIGHT_DB_NAME only to giftly_e2e_test. The suite runs with one worker and exercises checkout, payment callbacks, inventory, roles, delivery, returns and responsive storefront layouts.
 
 The optional customer API integration test requires a **separate, empty MySQL test database** whose name matches `giftly_*_test`. Create that schema, then from `core-backend` set both `DB_NAME` and `TEST_DB_NAME` to its name, run `npm.cmd run migrate` and `npm.cmd run seed:demo`, and then `npm.cmd run test:integration`. The test refuses databases with existing users or orders; never point it at `gift_ecommerce` or production data. It uses dummy in-process VNPAY/GHN credentials and makes no external provider calls. It exercises registration/JWT (including duplicate/invalid input, role escalation, locked accounts and route authorization), cross-customer order privacy, Gift Finder fallback, cart/quote, idempotent COD checkout, VNPAY initiation/IPN/return/failure/replay and late callback, customer/admin cancellation guards for paid orders, GHN webhook authentication/deduplication/state progression, and inventory restoration. It removes all test fixtures but leaves the isolated schema intact.
 
-The local verification schema `giftly_verification_test` has been migrated and seeded for repeatable integration runs. Its fixture tables are empty after the passing suite. Development data remains in `gift_ecommerce`; do not use the test schema for application development or production.
+Historical verification note only: giftly_verification_test was used by earlier work. Current test and Docker instructions use giftly_e2e_test; do not target giftly_verification_test or gift_ecommerce for current tests/migrations.
 
 The integration suite also submits two separate customer checkouts concurrently while only one test unit is available. It verifies one order succeeds, the other receives HTTP 409, inventory never drops below zero, and cancellation restores the reservation. The checkout's idempotency lookup is a non-locking read to avoid an InnoDB gap-lock deadlock; the unique key and duplicate-key recovery still make same-key retries idempotent.
 
 The browser suite also exercises customer administration: an admin locks a customer in the UI, the customer's already-issued JWT is rejected by `/api/auth/me`, and unlocking restores access for that token. The fixture helper removes both isolated accounts and their admin audit rows.
 
-Latest local verification: all nine Playwright scenarios passed, including customer return processing and coupon checkout; the API integration test passed on `giftly_verification_test`; backend unit tests reported 14 passed and one database-dependent test skipped; Python tests passed 5/5; frontend lint/build and backend JavaScript syntax checks passed. Read-only checks confirmed that development data remains unchanged and the isolated Playwright fixture rows were cleaned. No live VNPAY or GHN transaction was attempted; provider credentials are still required for external sandbox validation.
+Latest local verification is recorded in PROGRESS.md and docs/GIFTLY_FINAL_REPORT.md; older dated verification notes below are historical and do not describe the current delivery contract.
 
-The Playwright suite now also covers shipping operations end to end without contacting a carrier: an admin advances an isolated COD order to PROCESSING, records an internal carrier and tracking number, and the customer sees the tracking history on the order page. The test cancels the unpaid order and removes its fixtures. All nine browser scenarios now pass together as one suite run.
+Current delivery behavior: admin assigns an internal shipper or creates a GHN shipment; internal shipper transitions are limited to assigned INTERNAL orders, while GHN webhook controls GHN orders. Admin cannot enter arbitrary carrier/tracking data or manually set SHIPPED/DELIVERED. The customer sees tracking history generated by the selected source.
 
 The VNPAY browser scenario uses explicit dummy credentials only in the Playwright Express process and intercepts the sandbox page in the browser. It verifies checkout selection, signed payment URL creation and redirection, then confirms the order remains UNPAID because no provider callback was received. This is not a real VNPAY transaction and does not alter development credentials.
 
-Migration `010_address_administrative_scheme.sql` adds `addresses.is_new_administrative_address` as an additive, rerunnable column with `FALSE` for existing rows. New account addresses can use the current ward/province scheme or the legacy ward/district/province scheme. The order snapshot preserves the selected scheme so GHN receives `is_new_to_address` and an empty district only for new-format destinations. `GHN_FROM_IS_NEW_ADDRESS=true` selects the new model for the configured sender address. Address fields remain name-based and must match GHN's master-data naming; no live catalog lookup is implemented. The schema change was applied twice on both the development and isolated verification databases without changing existing row counts.
+Historical migration record: migration 010 was tested in an earlier phase. Do not repeat those development/verification database writes; current schema verification and tests target only giftly_e2e_test.
 
 ### Return and refund behavior
 

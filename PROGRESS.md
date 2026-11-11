@@ -311,21 +311,29 @@ Chạy `cd core-backend; npm.cmd run migrate`; migration thêm `orders.shipping_
 
 ## Trạng thái kiểm thử thực tế hiện tại — snapshot 2026-11-11
 
-- **Backend suite:** `node --test --test-reporter=spec --test-concurrency=1` sau khi dựng fixture bằng `node scripts/resetTestDb.js giftly_e2e_test --seed-demo`: 141 pass, 0 fail, 0 skipped.
+- **Backend suite:** `node --test --test-reporter=spec --test-concurrency=1` with `DB_NAME=TEST_DB_NAME=giftly_e2e_test`, `NODE_ENV=test`: 147 tests, 147 pass, 0 fail, 0 skipped (duration 93109.4712 ms).
 - **Frontend unit (`npm.cmd test`):** 24 pass, 0 fail (giai đoạn 6).
 - **Frontend lint/build:** lint thành công; build thành công sau khi tách tải trang theo route, entry chunk 287.50 kB và không còn cảnh báo chunk trên 500 kB.
 - **Playwright E2E:** 28 passed; lần chạy hiện tại trên backend thật và DB `giftly_e2e_test` hoàn tất trong 1.6 phút.
-- **Docker giai đoạn 7:** project `giftly_clean`, 5 dịch vụ healthy trước khi dừng; migration 000–014 và seed demo thành công trên volume mới, DB tên `giftly_e2e_test`. Đăng nhập demo REES46 thành công; endpoint gợi ý trả `source=ranker_lc1` với 8 sản phẩm; ML `/health` healthy; frontend HTTP 200. Đã dừng bằng `docker compose -p giftly_clean down`, volume giữ nguyên.
+- Docker run 2026-11-11: isolated project `giftly_clean_20261111`, 5 services healthy/running; DB `giftly_e2e_test`, 16 migrations and 27 tables. Fixture: 1,000 demo products, 14 base products, 2,000 simulated orders, 3 REES46 demo users. Login through backend yielded `source=ranker_lc1`, 8 results. ML healthy; backend/frontend HTTP 200. Alternate ports 13307/16380/8001/5002/3001 were used because defaults were occupied. `docker compose down` stopped containers without `-v`; volumes remain.
 - **Phạm vi tài liệu:** các số trên chỉ áp dụng cho log của lần chạy được nêu. Các kiểm thử lịch sử khác cần chạy lại nếu cần xác nhận trạng thái hiện tại.
 
 ## Nhật ký giai đoạn 6–7 (2026-11-11)
 
 - Giai đoạn 6: E2E Playwright 28 passed; frontend unit 24 pass, lint và build thành công.
-- Giai đoạn 7: Docker Compose đủ 5 dịch vụ đã lên healthy trên project/volume riêng. Migration 000–014 và `seed:demo` chạy trong MySQL cô lập. Health ML thành công; đăng nhập tài khoản demo REES46 và gọi gợi ý xác nhận `source=ranker_lc1`, 8 kết quả; frontend trả HTTP 200. Chạy `down` không kèm `-v`, volume được giữ.
-- Backend suite sau đó chạy lại trên `giftly_e2e_test`: lần đầu 135 pass, 6 fail vì catalog/tag và dữ liệu mô phỏng chưa được nạp; sau khi dựng fixture bằng `resetTestDb.js --seed-demo`, lần chạy đầy đủ đạt 141 pass, 0 fail, 0 skipped. Không sửa test/assertion. Output cuối: `ℹ tests 141`, `ℹ pass 141`, `ℹ fail 0`, `ℹ skipped 0`, `ℹ duration_ms 37299.1906`.
+- Docker run 2026-11-11: isolated project `giftly_clean_20261111`, 5 services healthy/running; DB `giftly_e2e_test`, 16 migrations and 27 tables. Fixture: 1,000 demo products, 14 base products, 2,000 simulated orders, 3 REES46 demo users. Login through backend yielded `source=ranker_lc1`, 8 results. ML healthy; backend/frontend HTTP 200. Alternate ports 13307/16380/8001/5002/3001 were used because defaults were occupied. `docker compose down` stopped containers without `-v`; volumes remain.
+- Latest backend output: `tests 147`, `pass 147`, `fail 0`, `skipped 0`, `duration_ms 93109.4712`; the earlier 141-test run is historical.
 - Sự cố thao tác được ghi nhận: một lượt chạy importer từ máy host trỏ nhầm vào MySQL trên cổng 3306 nhưng vẫn dùng đúng DB `giftly_e2e_test`; output khi đó thêm 3 user demo, không thêm sản phẩm. Không xóa dữ liệu theo yêu cầu. Sau đó importer được chạy lại với `DB_HOST=127.0.0.1`, `DB_PORT=13306` trên DB cô lập `giftly_e2e_test` của project `giftly_clean`: thêm 188 sản phẩm và 3 user demo (tổng 202 sản phẩm gồm 14 seed + 188 REES46; 3 user). Không ghi vào `gift_ecommerce` hoặc `giftly_verification_test`.
 
 ## Còn lại / chưa xác minh
 
 - Kết quả Docker là local demo với cấu hình secrets/ports tạm thời; chưa xác minh triển khai production hoặc kết nối merchant thật của VNPAY/GHN.
 - Các kết quả xác minh không bao gồm triển khai production hoặc giao dịch VNPAY/GHN với merchant thật.
+
+
+## Latest verification update (2026-11-11)
+
+- Frontend: `npm.cmd test` reported 24 tests, 24 pass, 0 fail, 0 skipped; lint exited 0; production build exited 0 (1,998 modules transformed).
+- Playwright full run after the assigned-order visibility assertion: 28 passed in 1.4m. The internal shipment scenario covers COD delivery, customer receipt/return, and shipper A/B isolation; the GHN scenario uses a signed local webhook.
+- Docker compose services used an isolated project and `giftly_e2e_test`; no writes were made to `gift_ecommerce` or `giftly_verification_test` in this run. The root `.env` contains local-only generated Compose secrets and is ignored by Git.
+- Remaining limits: VNPAY/GHN production merchant flows were not exercised; Giftly interactions were not used to train LC-1; refunds and email delivery are not integrated.
