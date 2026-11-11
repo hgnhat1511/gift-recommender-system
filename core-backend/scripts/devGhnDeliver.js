@@ -1,8 +1,18 @@
 'use strict';
 
+const path = require('node:path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to send a development GHN webhook in production.');
   process.exit(1);
+}
+
+const dbName = (process.env.DB_NAME || '').trim();
+const testDbName = (process.env.TEST_DB_NAME || '').trim();
+if (dbName !== 'giftly_e2e_test' || testDbName !== 'giftly_e2e_test') {
+  console.error('Refusing to send a development GHN webhook unless DB_NAME and TEST_DB_NAME are both giftly_e2e_test.');
+  process.exit(2);
 }
 
 const [clientOrderCode, ghnOrderCode] = process.argv.slice(2);

@@ -285,7 +285,13 @@ GHN is optional and remains disabled until staging credentials, sender address a
 
 For a disposable test database, set `NODE_ENV=test`, `DB_NAME=giftly_e2e_test` and `TEST_DB_NAME=giftly_e2e_test`, then run `node scripts/resetTestDb.js giftly_e2e_test --seed-demo` from `core-backend`. This recreates only an `_test` database, applies every migration, imports the committed 1,000-product catalog and rule_v1 tags, and generates simulated test transactions. It reads repository data files and does not copy data from `gift_ecommerce`.
 
-For local GHN state-flow demos only, set `GHN_SHOP_ID` and `GHN_WEBHOOK_SECRET` in `core-backend/.env`, create a GHN shipment for the order, then run `node scripts/devGhnDeliver.js <giftly-order-code> <ghn-order-code>` from `core-backend`. The script sends local `delivering` and `delivered` webhook events using the configured shared secret. It refuses production and non-local API URLs; it does not contact GHN.
+For local GHN state-flow demos only, start the backend with `DB_NAME=giftly_e2e_test` and `TEST_DB_NAME=giftly_e2e_test`, and set `GHN_SHOP_ID` and `GHN_WEBHOOK_SECRET` in `core-backend/.env`. Create a GHN shipment for the demo order, then run from `core-backend`:
+
+```powershell
+node scripts/devGhnDeliver.js <giftly-order-code> <ghn-order-code>
+```
+
+The script sends local `delivering` and `delivered` webhook events using the configured shared secret. It refuses production, any database other than `giftly_e2e_test`, and non-local API URLs. It does not contact GHN. The database check applies to the script environment; start the local backend with the same DB variables.
 
 The Python service provides `/health`, `/model`, `/recommend/rank`, `/recommendations`, `/gift-finder` and `/similar`. `/recommend/rank` serves the frozen LightGBM LC-1 model for compatible REES46 IDs; `/recommendations` and `/gift-finder` are content/rule baselines, not the trained ranker. Express validates returned product IDs and falls back to Node ranking if Python is unavailable. Gift Finder filters candidates against Giftly's real, sellable catalog before the Python content baseline can reorder them. LC-1's offline metrics are from REES46; Giftly-domain evaluation and retraining remain open work. Start the service from `ml-service`:
 
