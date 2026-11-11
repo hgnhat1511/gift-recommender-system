@@ -94,6 +94,8 @@ test('COD internal shipment: admin assigns, shipper delivers, customer confirms 
 
     await openAs(page, shipperA, '/shipper');
     const assignedCard = page.locator('.commerce-panel').filter({ hasText: assignedOrder.orderCode });
+    await expect(assignedCard).toBeVisible();
+    await expect(page.locator('.commerce-panel').filter({ hasText: otherOrder.orderCode })).toHaveCount(0);
     await expect(assignedCard.getByRole('button', { name: /Bắt đầu giao/ })).toBeVisible();
     await assignedCard.getByRole('button', { name: /Bắt đầu giao/ }).click();
     await expect(assignedCard.getByRole('button', { name: /Xác nhận giao thành công/ })).toBeVisible();
