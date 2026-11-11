@@ -181,7 +181,15 @@ async function create(req, res, next) {
     } finally { connection.release(); }
 }
 
-const orderSelect = `SELECT o.*, (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) item_count FROM orders o`;
+function positiveDays(name, fallback) {
+    const value = Number(process.env[name]);
+    return Number.isInteger(value) && value >= 1 && value <= 365 ? value : fallback;
+}
+const autoReceiveDays = positiveDays('ORDER_AUTO_RECEIVE_DAYS', 7);
+const returnWindowDays = positiveDays('RETURN_WINDOW_DAYS', 7);
+const orderSelect = `SELECT o.*, DATE_ADD(o.delivered_at, INTERVAL ${autoReceiveDays} DAY) auto_received_at,
+    DATE_ADD(o.delivered_at, INTERVAL ${returnWindowDays} DAY) return_deadline,
+    (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id=o.id) item_count FROM orders o`;
 
 const activeReorders = new Map();
 
@@ -262,10 +270,17 @@ async function listMine(req, res, next) {
 }
 
 function orderView(row, items, history, shippingHistory) {
+    const deliveredAt = row.delivered_at || null;
+    const autoReceivedAt = row.auto_received_at || null;
+    const automaticallyReceived = Boolean(autoReceivedAt && new Date(autoReceivedAt) <= new Date());
+    const receiptAt = row.received_confirmed_at || (automaticallyReceived ? autoReceivedAt : null);
     return { id:String(row.id),orderCode:row.order_code,status:row.status,paymentMethod:row.payment_method,shippingMethod:row.shipping_method||'STANDARD',paymentStatus:row.payment_status,
         recipientName:row.recipient_name,phone:row.phone,shippingAddress:row.shipping_address,customerNote:row.customer_note,couponCode:row.coupon_code,
         shippingCarrier:row.shipping_carrier||null,trackingNumber:row.tracking_number||null,
         subtotal:Number(row.subtotal),discount:Number(row.discount_amount),shippingFee:Number(row.shipping_fee),total:Number(row.total_amount),
+        deliveredAt,receivedConfirmedAt:row.received_confirmed_at||null,receivedAt:receiptAt,
+        canConfirmReceived:row.status==='DELIVERED'&&Boolean(deliveredAt)&&!row.received_confirmed_at&&!automaticallyReceived,
+        returnDeadline:row.return_deadline||null,returnWindowOpen:row.status==='DELIVERED'&&Boolean(deliveredAt)&&Boolean(row.return_deadline)&&new Date(row.return_deadline)>=new Date(),
         createdAt:row.created_at,updatedAt:row.updated_at,itemCount:Number(row.item_count || 0),items,history,shippingHistory:shippingHistory||[] };
 }
 
@@ -287,6 +302,28 @@ async function getOrderData(connection, orderId, whereClause, params) {
 
 async function detailMine(req,res,next){
     try{const order=await getOrderData(pool,req.params.id,'o.id=? AND o.user_id=?',[req.params.id,req.user.id]);if(!order)return res.status(404).json({success:false,message:'Order not found.'});return res.json({success:true,data:order})}catch(error){return next(error)}
+}
+
+async function confirmReceived(req,res,next){
+    if(!/^\d+$/.test(String(req.params.id||'')))return res.status(400).json({success:false,message:'Invalid order id.'});
+    const connection=await pool.getConnection();
+    try{
+        await connection.beginTransaction();
+        const [[order]]=await connection.execute(`SELECT id,status,delivered_at,received_confirmed_at,
+            DATE_ADD(delivered_at, INTERVAL ${autoReceiveDays} DAY) auto_received_at
+            FROM orders WHERE id=? AND user_id=? FOR UPDATE`,[req.params.id,req.user.id]);
+        if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
+        if(order.status!=='DELIVERED'||!order.delivered_at){await connection.rollback();return res.status(409).json({success:false,message:'Only delivered orders can be confirmed as received.'})}
+        if(order.received_confirmed_at){await connection.commit();return res.json({success:true,data:{receivedConfirmedAt:order.received_confirmed_at,alreadyConfirmed:true}})}
+        if(new Date(order.auto_received_at)<=new Date()){
+            await connection.commit();
+            return res.json({success:true,data:{receivedConfirmedAt:null,receivedAt:order.auto_received_at,automaticallyConfirmed:true}});
+        }
+        await connection.execute('UPDATE orders SET received_confirmed_at=NOW() WHERE id=? AND received_confirmed_at IS NULL',[order.id]);
+        await connection.commit();
+        const [[saved]]=await pool.execute('SELECT received_confirmed_at FROM orders WHERE id=?',[order.id]);
+        return res.json({success:true,data:{receivedConfirmedAt:saved.received_confirmed_at,automaticallyConfirmed:false}});
+    }catch(error){await connection.rollback();return next(error)}finally{connection.release()}
 }
 
 async function cancelMine(req,res,next){
@@ -335,4 +372,4 @@ async function releaseCoupon(connection,orderId){
     if(uses[0]){await connection.execute('UPDATE coupons SET used_count=GREATEST(used_count-1,0) WHERE id=?',[uses[0].coupon_id]);await connection.execute('DELETE FROM coupon_uses WHERE order_id=?',[orderId])}
 }
 
-module.exports={quote,create,listMine,detailMine,cancelMine,reorderMine,orderView,getOrderData,restoreStock,releaseCoupon};
+module.exports={quote,create,listMine,detailMine,confirmReceived,cancelMine,reorderMine,orderView,getOrderData,restoreStock,releaseCoupon};

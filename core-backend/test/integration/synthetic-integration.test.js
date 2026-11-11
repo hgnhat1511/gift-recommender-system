@@ -37,6 +37,7 @@ test('Khu vực 2b: Xác minh tích hợp SQL thật cho quy tắc chặn sản 
 
   try {
     const [[database]] = await pool.query('SELECT DATABASE() name');
+    console.log(`[synthetic-integration.test.js] SELECT DATABASE(): ${database.name}`);
     assert.equal(database.name, testDatabase, 'API phải kết nối chính xác tới TEST_DB_NAME');
 
     server = app.listen(0);

@@ -32,6 +32,7 @@ test('Gift Finder: Lọc quà tặng theo người nhận, dịp tặng, ngân s
     t.before(async () => {
         // Xác nhận pool kết nối đúng test DB
         const [[dbRow]] = await pool.query('SELECT DATABASE() name');
+        console.log(`[gift-tag-filter.test.js] SELECT DATABASE(): ${dbRow.name}`);
         assert.equal(dbRow.name, testDatabase, `API must be connected to "${testDatabase}"`);
 
         // Khởi động server test trên ephemeral port

@@ -293,6 +293,7 @@ async function adminOrderDetail(req,res,next){
 
 async function updateOrderStatus(req,res,next){
     const {status,note}=req.body||{};
+    if(['SHIPPED','DELIVERED'].includes(status))return res.status(409).json({success:false,message:'Only the GHN webhook can set shipped or delivered order status.'});
     if(!allowedStatuses.includes(status)||(note!=null&&(typeof note!=='string'||note.length>500)))return res.status(400).json({success:false,message:'Invalid order status update.'});
     const connection=await pool.getConnection();
     try{

@@ -34,6 +34,7 @@ test('Gift Finder, checkout, VNPAY/GHN callbacks and return inventory keep comme
 
     try {
         const [[database]] = await pool.query('SELECT DATABASE() name');
+        console.log(`[commerce.e2e.test.js] SELECT DATABASE(): ${database.name}`);
         assert.equal(database.name, testDatabase, 'the API must be connected to TEST_DB_NAME');
         const [[existingRows]] = await pool.query('SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM orders) orders');
         assert.equal(Number(existingRows.users), 0, 'refusing to run against a test database containing users');

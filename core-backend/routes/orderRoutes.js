@@ -8,6 +8,7 @@ router.post('/quote',orders.quote);
 router.post('/',orders.create);
 router.get('/',orders.listMine);
 router.get('/:id',orders.detailMine);
+router.post('/:id/confirm-received',orders.confirmReceived);
 router.post('/:id/cancel',orders.cancelMine);
 router.post('/:id/reorder',orders.reorderMine);
 router.post('/:id/returns',returns.create);

@@ -49,6 +49,9 @@ test('Kiểm chứng B: Đơn mô phỏng có ảnh hưởng gợi ý không (đ
     }
 
     // Đảm bảo tồn tại user có ĐÚNG ml_user_id = 27692594
+    const [[database]] = await conn.query('SELECT DATABASE() name');
+    console.log(`[simulation-impact.test.js] SELECT DATABASE(): ${database.name}`);
+
     const TARGET_ML_USER_ID = 27692594;
     let targetUserId;
     let createdUser = false;

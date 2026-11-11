@@ -22,6 +22,16 @@ export const ORDER_STATUS = Object.freeze({
   CANCELLED: 'Đã hủy',
 });
 
+export const ORDER_RECEIPT_LABEL = Object.freeze({
+  TITLE: 'Xác nhận nhận hàng',
+  CONFIRMED: 'Bạn đã xác nhận nhận hàng',
+  AUTOMATIC: 'Hệ thống tự xác nhận sau thời hạn',
+  ACTION: 'Đã nhận hàng',
+  WAITING: 'Đang chờ xác nhận nhận hàng.',
+  WINDOW_CLOSED: 'Cửa sổ yêu cầu đổi trả đã đóng.',
+  RETURN_DEADLINE: 'Hạn gửi yêu cầu đổi trả',
+});
+
 export const PAYMENT_STATUS = Object.freeze({
   UNPAID: 'Chưa thanh toán',
   PAID: 'Đã thanh toán',

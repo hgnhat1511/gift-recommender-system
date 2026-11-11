@@ -96,6 +96,7 @@ test('Khu vực 2i & 2j: Race condition Vận đơn GHN, Bù trừ Pha 3, Hết 
 
   try {
     const [[database]] = await pool.query('SELECT DATABASE() name');
+    console.log(`[order-shipment-race.test.js] SELECT DATABASE(): ${database.name}`);
     assert.equal(database.name, testDatabase, 'API phải kết nối chính xác tới TEST_DB_NAME');
 
     server = app.listen(0);

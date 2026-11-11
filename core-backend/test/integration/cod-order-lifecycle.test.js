@@ -46,6 +46,7 @@ test('Khu vực 2a: Xác minh và hoàn thiện toàn diện vòng đời đơn 
 
   try {
     const [[database]] = await pool.query('SELECT DATABASE() name');
+    console.log(`[cod-order-lifecycle.test.js] SELECT DATABASE(): ${database.name}`);
     assert.equal(database.name, testDatabase, 'API phải kết nối chính xác tới TEST_DB_NAME');
 
     // Khởi tạo HTTP server trên cổng ngẫu nhiên (ephemeral port)

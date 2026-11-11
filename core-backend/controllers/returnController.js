@@ -1,4 +1,6 @@
 const pool=require('../config/db');
+const configuredReturnDays=Number(process.env.RETURN_WINDOW_DAYS);
+const returnWindowDays=Number.isInteger(configuredReturnDays)&&configuredReturnDays>=1&&configuredReturnDays<=365?configuredReturnDays:7;
 
 async function create(req,res,next){
     const {reason,details}=req.body||{};
@@ -7,9 +9,12 @@ async function create(req,res,next){
     let inTransaction=false;
     try{
         await connection.beginTransaction();inTransaction=true;
-        const [orders]=await connection.execute("SELECT id FROM orders WHERE id=? AND user_id=? AND status='DELIVERED' FOR UPDATE",[req.params.id,req.user.id]);
+        const [orders]=await connection.execute(`SELECT id,delivered_at,
+            (delivered_at IS NOT NULL AND NOW()<=DATE_ADD(delivered_at,INTERVAL ${returnWindowDays} DAY)) return_window_open
+            FROM orders WHERE id=? AND user_id=? AND status='DELIVERED' FOR UPDATE`,[req.params.id,req.user.id]);
         const order=orders[0];
         if(!order){await connection.rollback();inTransaction=false;return res.status(409).json({success:false,message:'Return requests are available for delivered orders.'})}
+        if(!order.delivered_at||Number(order.return_window_open)!==1){await connection.rollback();inTransaction=false;return res.status(409).json({success:false,message:'The return window has closed.'})}
         const [[existing]]=await connection.execute("SELECT id FROM return_requests WHERE order_id=? AND status IN ('PENDING','APPROVED','COMPLETED') LIMIT 1",[order.id]);
         if(existing){await connection.rollback();inTransaction=false;return res.status(409).json({success:false,message:'This order already has a return request that prevents another submission.'})}
         const [result]=await connection.execute('INSERT INTO return_requests (order_id,user_id,reason,details) VALUES (?,?,?,?)',[order.id,req.user.id,reason.trim(),details?.trim()||null]);
