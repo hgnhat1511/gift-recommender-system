@@ -19,7 +19,13 @@ const pool = require('../config/db');
 const { recommendProducts } = require('../services/recommendationService');
 
 test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
-    const dbName = process.env.DB_NAME || 'giftly_e2e_test';
+    const dbName = (process.env.TEST_DB_NAME || process.env.DB_NAME || 'giftly_e2e_test').trim();
+    assert.match(dbName, /^[a-z0-9_]+_test$/i, `giftly-final-verification test requires a database ending in _test (got "${dbName}")`);
+    assert.notEqual(dbName, 'giftly_verification_test', 'Refusing to run against giftly_verification_test');
+
+    const { resetTestDatabase } = require('../scripts/resetTestDb');
+    await resetTestDatabase(dbName, { seedDemo: true });
+
     const conn = await mysql.createConnection({
         host: process.env.DB_HOST || 'localhost',
         port: Number(process.env.DB_PORT) || 3306,
@@ -27,6 +33,10 @@ test('BƯỚC 6: Kiểm thử toàn diện Giftly Final', async (t) => {
         password: process.env.DB_PASSWORD,
         database: dbName
     });
+
+    const [[database]] = await conn.query('SELECT DATABASE() name');
+    console.log(`[giftly-final-verification.test.js] SELECT DATABASE(): ${database.name}`);
+    assert.equal(database.name, dbName, `Test must be connected to "${dbName}"`);
 
     t.after(async () => {
         await conn.end();

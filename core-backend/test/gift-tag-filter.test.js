@@ -30,6 +30,9 @@ test('Gift Finder: Lọc quà tặng theo người nhận, dịp tặng, ngân s
     let baseUrl;
 
     t.before(async () => {
+        const { resetTestDatabase } = require('../scripts/resetTestDb');
+        await resetTestDatabase(testDatabase, { seedDemo: true });
+
         // Xác nhận pool kết nối đúng test DB
         const [[dbRow]] = await pool.query('SELECT DATABASE() name');
         console.log(`[gift-tag-filter.test.js] SELECT DATABASE(): ${dbRow.name}`);
