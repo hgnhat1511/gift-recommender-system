@@ -149,7 +149,7 @@ async function finder(req, res, next) {
             interests.some((value) => typeof value !== 'string' || value.length > 80) ||
             [occasion,recipient,style,giftType,query].some((value) => value != null && (typeof value !== 'string' || value.length > 100)) ||
             !(occasion || recipient || interests.length || style || giftType || query || budget !== null)) {
-            return res.status(400).json({ success: false, message: 'Invalid gift finder criteria.' });
+            return res.status(400).json({ success: false, message: 'Tiêu chí tìm quà không hợp lệ. Vui lòng chọn ít nhất một tiêu chí hợp lệ.' });
         }
         const [rows] = await pool.execute(`SELECT p.*,c.name category_name,0 average_rating,0 review_count FROM products p
             LEFT JOIN categories c ON c.id=p.category_id WHERE p.status='ACTIVE' AND p.stock>0
@@ -168,7 +168,7 @@ async function finder(req, res, next) {
             if (budget !== null) { score += 1; matched.push('budget'); }
             if (row.is_featured) score += 0.25;
             return { item: present(row), score, matched };
-        }).filter((row) => row.score > 0).sort((a, b) => b.score - a.score || a.item.price - b.item.price).slice(0, 12)
+        }).filter((row) => row.score > 0).sort((a, b) => Number(!a.matched.some((m) => !m.startsWith('budget'))) - Number(!b.matched.some((m) => !m.startsWith('budget'))) || Number(Boolean(a.item.isSyntheticDisplay)) - Number(Boolean(b.item.isSyntheticDisplay)) || b.score - a.score || a.item.price - b.item.price).slice(0, 12)
             .map(({ item, matched }) => ({ ...item, reasons: matched.filter((value) => value !== 'text').map((value) => {
                 const [kind, label] = value.split(':');
                 return kind === 'occasion' ? `Đúng dịp ${label}` : kind === 'recipient' ? `Phù hợp người nhận ${label}` : kind === 'interest' ? `Khớp sở thích ${label}` : kind === 'style' ? `Đúng phong cách ${label}` : kind === 'type' ? `Đúng loại quà ${label}` : kind === 'budget' ? `Trong ngân sách ${Number(budget).toLocaleString('vi-VN')} ₫` : `Khớp nội dung ${query}`;

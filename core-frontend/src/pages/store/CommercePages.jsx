@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import api, { getApiError, getAuth } from '../../lib/api.js';
+import { translateApiMessage } from '../../lib/apiMessages.js';
 import { beginGuestCartMerge, clearGuestCart, clearGuestCartMergePending, completeGuestCartMerge, getGuestCart, getPendingGuestCartMerge, removeGuestCartItem, setGuestCartAllSelected, updateGuestCartItem } from '../../lib/guestCart.js';
 import { emitCartChange } from '../../context/CartContext.jsx';
 import { buildUpdateCartItemPayload, buildUpdateSelectionPayload, buildUpdateAllSelectionPayload, buildCreateOrderPayload } from '../../lib/cartPayloads.js';
@@ -189,7 +190,7 @@ export function OrderDetailPage(){
       emitCartChange();
       navigate('/cart',{
         state:{
-          message:data.message||'Sản phẩm từ đơn hàng đã được thêm vào giỏ hàng.',
+          message:translateApiMessage(data.message)||'Sản phẩm từ đơn hàng đã được thêm vào giỏ hàng.',
           reorderResult:data.data
         }
       });

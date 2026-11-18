@@ -44,7 +44,7 @@ describe('Contract: Order Checkout Endpoint (POST /orders)', () => {
 
   test('2. Hỗ trợ phương thức thanh toán và vận chuyển đúng hợp đồng', () => {
     assert.deepEqual(SUPPORTED_SHIPPING_METHODS, ['STANDARD', 'EXPRESS']);
-    assert.deepEqual(SUPPORTED_PAYMENT_METHODS, ['COD', 'VNPAY']);
+    assert.deepEqual(SUPPORTED_PAYMENT_METHODS, ['COD', 'VNPAY', 'MOMO']);
 
     const expressOrder = parseCreateOrderBody({ addressId: 1, shippingMethod: 'EXPRESS', paymentMethod: 'VNPAY' });
     assert.equal(expressOrder.ok, true);

@@ -1089,6 +1089,19 @@
   transition: all 0.2s ease;
 }
 
+.commerce-panel > label.commerce-address-choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.commerce-address-choice small {
+  font-weight: 400;
+}
+
 .commerce-address-choice.selected {
   border-color: var(--brand-primary);
   background: #FEF2F2;

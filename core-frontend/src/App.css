@@ -688,6 +688,7 @@
   opacity: 1;
   visibility: visible;
   position: relative;
+  min-height: 440px;
 }
 
 .festive-slide-backdrop {
@@ -712,8 +713,8 @@
 .festive-slide-content {
   position: relative;
   z-index: 2;
-  padding: 44px 40px;
-  max-width: 580px;
+  padding: 44px 80px;
+  max-width: 660px;
   color: #FFFFFF;
 }
 

@@ -82,7 +82,7 @@ export function SiteHeader() {
                 <Gift size={30} strokeWidth={2.2} aria-hidden="true" />
               </span>
               <span className="site-brand-name">
-                giftly<span>.</span>
+                <b className="site-brand-word">giftly<span>.</span></b>
                 <small>Gửi quà, gửi yêu thương</small>
               </span>
             </Link>

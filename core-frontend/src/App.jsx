@@ -799,7 +799,7 @@ function App() {
           <div className="footer-brand">
             <Link className="site-brand footer-brand-link" to="/">
               <span className="site-brand-icon"><Gift size={24} /></span>
-              <span className="site-brand-name">giftly<span>.</span><small>Gửi quà, gửi yêu thương</small></span>
+              <span className="site-brand-name"><b className="site-brand-word">giftly<span>.</span></b><small>Gửi quà, gửi yêu thương</small></span>
             </Link>
             <p>
               Nơi giúp bạn tìm món quà phù hợp và gửi gắm tình cảm đến những

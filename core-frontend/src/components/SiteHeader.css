@@ -125,8 +125,12 @@
   color: var(--brand-primary, #DC2626);
 }
 
-.site-brand-name > span {
-  display: inline;
+.site-brand-word {
+  display: block;
+  font-weight: inherit;
+}
+
+.site-brand-word > span {
   color: #EF4444;
 }
 
@@ -429,5 +433,22 @@
   }
   .site-action-item span {
     display: none;
+  }
+}
+
+/* Mobile: thanh khuyến mãi gọn một dòng, ẩn phần thông tin phụ */
+@media (max-width: 640px) {
+  .site-announcement {
+    padding: 6px 16px;
+    font-size: 12px;
+  }
+  .site-announcement-info {
+    display: none;
+  }
+  .site-announcement-promo {
+    justify-content: center;
+    width: 100%;
+    text-align: center;
+    line-height: 1.35;
   }
 }

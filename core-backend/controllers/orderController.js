@@ -293,8 +293,8 @@ async function getOrderData(connection, orderId, whereClause, params) {
     const [orders]=await connection.execute(`${orderSelect} WHERE ${whereClause} LIMIT 1`,params);
     if(!orders[0])return null;
     const [items]=await connection.execute('SELECT id,product_id,product_name,image_url,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id',[orderId]);
-    const [history]=await connection.execute('SELECT h.from_status,h.to_status,h.note,h.source,h.changed_by,u.full_name changed_by_name,h.created_at FROM order_status_history h LEFT JOIN users u ON u.id=h.changed_by WHERE h.order_id=? ORDER BY h.created_at,h.id',[orderId]);
-    const [shippingHistory]=await connection.execute('SELECT carrier,tracking_number,note,created_at FROM order_shipping_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
+    const [history]=await connection.execute('SELECT h.from_status fromStatus,h.to_status toStatus,h.note,h.source,h.changed_by changedBy,u.full_name changedByName,h.created_at createdAt FROM order_status_history h LEFT JOIN users u ON u.id=h.changed_by WHERE h.order_id=? ORDER BY h.created_at,h.id',[orderId]);
+    const [shippingHistory]=await connection.execute('SELECT carrier,tracking_number trackingNumber,note,created_at createdAt FROM order_shipping_history WHERE order_id=? ORDER BY created_at,id',[orderId]);
     const [shipmentEvents]=await connection.execute(`SELECT s.provider,s.tracking_number,e.provider_status,e.normalized_status,
         DATE_FORMAT(e.occurred_at,'%Y-%m-%dT%H:%i:%sZ') occurred_at
         FROM shipments s JOIN shipment_events e ON e.shipment_id=s.id WHERE s.order_id=? ORDER BY e.occurred_at,e.id`,[orderId]);

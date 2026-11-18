@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { translateApiMessage } from './apiMessages.js';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
@@ -33,7 +34,7 @@ api.interceptors.request.use((config) => {
 });
 
 export function getApiError(error, fallback) {
-  return error.response?.data?.message || fallback;
+  return translateApiMessage(error.response?.data?.message) || fallback;
 }
 
 export default api;
