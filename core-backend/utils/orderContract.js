@@ -6,7 +6,7 @@
 'use strict';
 
 const SUPPORTED_SHIPPING_METHODS = ['STANDARD', 'EXPRESS'];
-const SUPPORTED_PAYMENT_METHODS = ['COD', 'VNPAY'];
+const SUPPORTED_PAYMENT_METHODS = ['COD', 'VNPAY', 'MOMO'];
 
 /**
  * Validate và parse body + Idempotency-Key header cho POST /orders

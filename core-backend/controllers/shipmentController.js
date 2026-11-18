@@ -46,7 +46,7 @@ async function createGhnShipment(req,res,next) {
         await connection1.beginTransaction();
         const [[lockedOrder]]=await connection1.execute('SELECT id,order_code,status,payment_method,payment_status,total_amount,recipient_name,phone,shipping_address,shipping_carrier,tracking_number,shipper_user_id FROM orders WHERE id=? FOR UPDATE',[req.params.orderId]);
         if(!lockedOrder){await connection1.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
-        if(lockedOrder.status!=='PROCESSING'||(lockedOrder.payment_method==='VNPAY'&&lockedOrder.payment_status!=='PAID')){
+        if(lockedOrder.status!=='PROCESSING'||(lockedOrder.payment_method!=='COD'&&lockedOrder.payment_status!=='PAID')){
             await connection1.rollback();
             return res.status(409).json({success:false,message:'Only a processing order that is paid or COD can be dispatched.'});
         }

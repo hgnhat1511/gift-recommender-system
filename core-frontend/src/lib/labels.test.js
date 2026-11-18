@@ -91,10 +91,12 @@ test('PAYMENT_STATUS labels match real DB enum', () => {
 test('PAYMENT_METHOD and SHIPPING_METHOD labels match real enum', () => {
   assert.equal(PAYMENT_METHOD.COD, 'Thanh toán khi nhận hàng');
   assert.equal(PAYMENT_METHOD.VNPAY, 'VNPAY');
+  assert.equal(PAYMENT_METHOD.MOMO, 'Ví MoMo');
   assert.equal(SHIPPING_METHOD.STANDARD, 'Tiêu chuẩn');
   assert.equal(SHIPPING_METHOD.EXPRESS, 'Giao nhanh');
   assert.equal(getPaymentMethodLabel('COD'), 'Thanh toán khi nhận hàng');
   assert.equal(getPaymentMethodLabel('VNPAY'), 'VNPAY');
+  assert.equal(getPaymentMethodLabel('MOMO'), 'Ví MoMo');
   assert.equal(getShippingMethodLabel('STANDARD'), 'Tiêu chuẩn');
   assert.equal(getShippingMethodLabel('EXPRESS'), 'Giao nhanh');
 });

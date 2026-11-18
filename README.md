@@ -1,5 +1,7 @@
 # Giftly — Phát triển hệ thống đề xuất sản phẩm dựa trên học máy trong ngách quà tặng
 
+> ⚡ **Bạn muốn chạy ngay dự án bằng Docker? Xem hướng dẫn tại [QUICKSTART.md](QUICKSTART.md) (Chỉ 2 bước với Docker Compose).**
+
 ## Định hướng đồ án
 
 Đề tài chính của Giftly là **phát triển và đánh giá hệ thống đề xuất sản phẩm dựa trên học máy cho sản phẩm quà tặng**. Website bán hàng là lớp ứng dụng để quản lý catalog, thu thập tín hiệu xem/giỏ hàng/đặt mua và trình bày gợi ý; thanh toán, vận chuyển và admin là nghiệp vụ hỗ trợ, không phải đóng góp nghiên cứu chính.

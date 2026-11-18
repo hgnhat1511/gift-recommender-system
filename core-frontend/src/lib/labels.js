@@ -46,6 +46,7 @@ export const PAYMENT_STATUS = Object.freeze({
 export const PAYMENT_METHOD = Object.freeze({
   COD: 'Thanh toán khi nhận hàng',
   VNPAY: 'VNPAY',
+  MOMO: 'Ví MoMo',
 });
 
 export const RETURN_STATUS = Object.freeze({
@@ -256,7 +257,7 @@ export function getOrderStatusLabel(orderOrStatus, options) {
     paymentStatus = options?.paymentStatus;
   }
 
-  if (status === 'PENDING' && paymentMethod === 'VNPAY' && paymentStatus === 'UNPAID') {
+  if (status === 'PENDING' && (paymentMethod === 'VNPAY' || paymentMethod === 'MOMO') && paymentStatus === 'UNPAID') {
     return 'Chờ thanh toán';
   }
 

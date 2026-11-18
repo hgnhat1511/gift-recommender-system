@@ -20,8 +20,8 @@
     {
       "table": "orders",
       "column": "payment_method",
-      "type": "enum('COD','VNPAY')",
-      "values": ["COD", "VNPAY"]
+      "type": "enum('COD','VNPAY','MOMO')",
+      "values": ["COD", "VNPAY", "MOMO"]
     },
     {
       "table": "orders",

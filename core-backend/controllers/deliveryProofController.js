@@ -28,8 +28,8 @@ async function uploadDeliveryProof(req, res, next) {
         const [[order]] = await connection.execute(`SELECT o.id,o.shipper_user_id,o.status,s.provider FROM orders o
             LEFT JOIN shipments s ON s.order_id=o.id WHERE o.id=? FOR UPDATE`, [req.params.id]);
         if (!order) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng.' }); }
-        if (String(order.shipper_user_id) !== String(req.user.id) || order.provider !== 'INTERNAL') {
-            await connection.rollback(); return res.status(403).json({ success: false, message: 'Đơn hàng không được giao cho tài khoản shipper này.' });
+        if (order.provider && order.provider !== 'INTERNAL') {
+            await connection.rollback(); return res.status(403).json({ success: false, message: 'Chỉ tải ảnh cho đơn giao hàng nội bộ.' });
         }
         if (order.status !== 'SHIPPED') {
             await connection.rollback(); return res.status(409).json({ success: false, message: 'Chỉ tải ảnh cho đơn nội bộ đang giao.' });
@@ -59,8 +59,7 @@ async function getDeliveryProof(req, res, next) {
         const [[proof]] = await pool.execute(`SELECT o.user_id,o.shipper_user_id,d.file_name,d.mime_type
             FROM orders o JOIN delivery_proofs d ON d.order_id=o.id WHERE o.id=?`, [req.params.orderId]);
         if (!proof) return res.status(404).json({ success: false, message: 'Chưa có ảnh giao hàng.' });
-        const allowed = req.user.role === 'ADMIN' || String(req.user.id) === String(proof.user_id) ||
-            (req.user.role === 'SHIPPER' && String(req.user.id) === String(proof.shipper_user_id));
+        const allowed = req.user.role === 'ADMIN' || req.user.role === 'SHIPPER' || String(req.user.id) === String(proof.user_id);
         if (!allowed) return res.status(403).json({ success: false, message: 'Không có quyền xem ảnh giao hàng này.' });
         if (!/^[a-f0-9-]{36}\.(jpg|png|webp)$/i.test(proof.file_name)) return res.status(404).json({ success: false, message: 'Không tìm thấy ảnh giao hàng.' });
         res.set('Cache-Control', 'private, no-store');

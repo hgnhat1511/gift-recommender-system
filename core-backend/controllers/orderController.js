@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const pool = require('../config/db');
 const vnpay = require('../services/payments/vnpay');
+const momo = require('../services/payments/momo');
 const { calculateReorderItems } = require('../utils/cartHelper');
 const { canCustomerCancel, parseCreateOrderBody } = require('../utils/orderContract');
 
@@ -106,6 +107,7 @@ async function create(req, res, next) {
     }
     const { addressId, couponCode, note, shippingMethod, paymentMethod, idempotencyKey: requestKey } = parsed;
     if (paymentMethod === 'VNPAY' && !vnpay.isConfigured()) return res.status(503).json({ success: false, message: 'Online payment is not configured for this environment.' });
+    if (paymentMethod === 'MOMO' && !momo.isConfigured()) return res.status(503).json({ success: false, message: 'Online payment is not configured for this environment.' });
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();

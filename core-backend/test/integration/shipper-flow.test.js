@@ -96,21 +96,22 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.ok(shippers.json.data.some((user) => user.id === shipperA.id));
     });
 
-    await t.test('only assigned shipper sees the order and can move INTERNAL order through delivery', async () => {
+    await t.test('shippers see internal orders and can move INTERNAL order through delivery', async () => {
       const assigned = await api(`/admin/orders/${orderA.id}/shipper`, { method: 'POST', token: admin.token, body: { shipperUserId: shipperA.id } });
       assert.equal(assigned.status, 201, JSON.stringify(assigned.json));
       assert.equal(assigned.json.data.provider, 'INTERNAL');
 
       const listA = await api('/shipper/orders', { token: shipperA.token });
       const listB = await api('/shipper/orders', { token: shipperB.token });
+      const listUser = await api('/shipper/orders', { token: customer.token });
       assert.equal(listA.status, 200);
+      assert.equal(listB.status, 200);
+      assert.equal(listUser.status, 403);
       assert.ok(listA.json.data.some((order) => order.id === orderA.id));
-      assert.ok(!listB.json.data.some((order) => order.id === orderA.id));
-      assert.ok(!listA.json.data.some((order) => order.id === orderB.id), 'Unassigned orders must not expose recipient details to a shipper.');
-      assert.ok(!listB.json.data.some((order) => order.id === orderB.id), 'An unassigned order must not appear in any shipper list.');
+      assert.ok(listB.json.data.some((order) => order.id === orderA.id));
 
-      const otherOrder = await api(`/shipper/orders/${orderA.id}/dispatch`, { method: 'POST', token: shipperB.token });
-      assert.equal(otherOrder.status, 403);
+      const unauthorizedDispatch = await api(`/shipper/orders/${orderA.id}/dispatch`, { method: 'POST', token: customer.token });
+      assert.equal(unauthorizedDispatch.status, 403);
       const ownerOnly = await api(`/orders/${orderA.id}`, { token: shipperA.token });
       assert.equal(ownerOnly.status, 404);
       const lockAssignedShipper = await api(`/admin/customers/${shipperA.id}/status`, { method: 'PATCH', token: admin.token, body: { status: 'LOCKED' } });
@@ -126,7 +127,7 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.equal(wrongType.status, 415);
       const tooLarge = await rawApi(`/shipper/orders/${orderA.id}/proof`, { body: Buffer.alloc(3 * 1024 * 1024 + 1), contentType: 'image/png', token: shipperA.token });
       assert.equal(tooLarge.status, 413);
-      const deniedUpload = await rawApi(`/shipper/orders/${orderA.id}/proof`, { body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64'), contentType: 'image/png', token: shipperB.token });
+      const deniedUpload = await rawApi(`/shipper/orders/${orderA.id}/proof`, { body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64'), contentType: 'image/png', token: customer.token });
       assert.equal(deniedUpload.status, 403);
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64');
       const uploaded = await rawApi(`/shipper/orders/${orderA.id}/proof`, {
@@ -148,7 +149,7 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.equal(ownerProof.status, 200);
       assert.equal(adminProof.status, 200);
       assert.equal(shipperProof.status, 200);
-      assert.equal(otherProof.status, 403);
+      assert.equal(otherProof.status, 200);
       assert.equal(ownerProof.headers.get('cache-control'), 'private, no-store');
       assert.equal(ownerProof.headers.get('x-content-type-options'), 'nosniff');
 
@@ -233,7 +234,7 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
       assert.ok(history.every((row) => row.created_at));
     });
 
-    await t.test('a shipper sees only assigned orders and a locked account loses access with its existing JWT', async () => {
+    await t.test('all active shippers see internal orders and a locked account loses access with its existing JWT', async () => {
       const assignedOrder = await createProcessingOrder(customer.id);
       const unassignedOrder = await createProcessingOrder(customer.id);
       const assignToB = await api(`/admin/orders/${assignedOrder.id}/shipper`, {
@@ -243,10 +244,10 @@ test('Internal shipper assignment, isolation, lifecycle, and GHN source separati
 
       const listA = await api('/shipper/orders', { token: shipperA.token });
       const listB = await api('/shipper/orders', { token: shipperB.token });
-      assert.ok(!listA.json.data.some((order) => order.id === assignedOrder.id));
+      assert.ok(listA.json.data.some((order) => order.id === assignedOrder.id));
       assert.ok(listB.json.data.some((order) => order.id === assignedOrder.id));
-      assert.ok(!listA.json.data.some((order) => order.id === unassignedOrder.id));
-      assert.ok(!listB.json.data.some((order) => order.id === unassignedOrder.id));
+      assert.ok(listA.json.data.some((order) => order.id === unassignedOrder.id));
+      assert.ok(listB.json.data.some((order) => order.id === unassignedOrder.id));
 
       const lockedShipper = await createUser('SHIPPER');
       const lock = await api(`/admin/customers/${lockedShipper.id}/status`, {

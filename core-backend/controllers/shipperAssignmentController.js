@@ -18,8 +18,8 @@ async function assignInternalShipper(req, res, next) {
         if (order.status !== 'PROCESSING') {
             await connection.rollback(); return res.status(409).json({ success: false, message: 'Chỉ gán shipper cho đơn đang chuẩn bị.' });
         }
-        if (order.payment_method === 'VNPAY' && order.payment_status !== 'PAID') {
-            await connection.rollback(); return res.status(409).json({ success: false, message: 'Đơn VNPAY chưa thanh toán.' });
+        if (order.payment_method !== 'COD' && order.payment_status !== 'PAID') {
+            await connection.rollback(); return res.status(409).json({ success: false, message: 'Đơn thanh toán online chưa thanh toán.' });
         }
         const [[existing]] = await connection.execute('SELECT id,provider FROM shipments WHERE order_id=? FOR UPDATE', [order.id]);
         if (existing) {

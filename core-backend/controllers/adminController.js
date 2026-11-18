@@ -304,9 +304,9 @@ async function updateOrderStatus(req,res,next){
         const [rows]=await connection.execute('SELECT * FROM orders WHERE id=? FOR UPDATE',[req.params.id]);
         const order=rows[0];if(!order){await connection.rollback();return res.status(404).json({success:false,message:'Order not found.'})}
         if(!transitions[order.status].includes(status)){await connection.rollback();return res.status(409).json({success:false,message:`Order cannot move from ${order.status} to ${status}.`})}
-        if(order.payment_method==='VNPAY'&&order.payment_status!=='PAID'&&['CONFIRMED','PROCESSING'].includes(status)){
+        if(order.payment_method!=='COD'&&order.payment_status!=='PAID'&&['CONFIRMED','PROCESSING'].includes(status)){
             await connection.rollback();
-            return res.status(409).json({success:false,message:'Đơn hàng VNPAY chưa thanh toán (PAID), không thể chuyển sang trạng thái xác nhận hoặc chuẩn bị hàng.'});
+            return res.status(409).json({success:false,message:'Đơn hàng thanh toán trực tuyến chưa thanh toán (PAID), không thể chuyển sang trạng thái xác nhận hoặc chuẩn bị hàng.'});
         }
         if(status==='CANCELLED'&&order.payment_status!=='UNPAID'){await connection.rollback();return res.status(409).json({success:false,message:'Paid orders cannot be cancelled until a refund workflow is available.'})}
         if(status==='CANCELLED'){
