@@ -10,8 +10,10 @@
 **/__pycache__/
 *.pyc
 *.pkl
+!ml-service/models/ranker_best_model.pkl
 *.joblib
 *.parquet
+!ml-service/data/processed/ranker_val_full.parquet
 **/coverage/
 **/*.log
 **/.pytest_cache/
